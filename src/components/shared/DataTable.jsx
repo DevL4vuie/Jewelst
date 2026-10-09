@@ -52,7 +52,7 @@ export default function DataTable({
           />
         </div>
 
-        <div className="flex items-center gap-2 justify-end">
+        <div className="flex items-center gap-2 justify-end data-table__actions">
           {actions}
           <ExcelExportBtn
             data={filteredData}
@@ -99,7 +99,7 @@ export default function DataTable({
 
       {/* Pagination Footer */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-3 text-sm font-bold">
+        <div className="flex items-center justify-between mt-3 text-sm font-bold data-table__pagination">
           <span className="text-muted">
             Showing {Math.min(filteredData.length, startIndex + 1)} to {Math.min(filteredData.length, startIndex + pageSize)} of {filteredData.length} records
           </span>

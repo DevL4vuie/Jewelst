@@ -10,7 +10,7 @@ export default function Navbar({ onToggleSidebar, isSidebarOpen }) {
   const { data } = useData();
 
   return (
-    <header className="pos-card" style={{ borderRadius: 0, borderTop: 0, borderLeft: 0, borderRight: 0, padding: '0.75rem 1rem', zIndex: 40 }}>
+    <header className="pos-card app-navbar" style={{ borderRadius: 0, borderTop: 0, borderLeft: 0, borderRight: 0, padding: '0.75rem 1rem', zIndex: 40 }}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
           <button
@@ -47,15 +47,17 @@ export default function Navbar({ onToggleSidebar, isSidebarOpen }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+        <div className="flex items-center gap-2 app-navbar__user" style={{ flexShrink: 0 }}>
           {user && (
             <div className="flex items-center gap-2">
               <div className="hidden md:flex flex-col text-right">
                 <span className="font-bold text-sm" style={{ whiteSpace: 'nowrap' }}>{user.full_name}</span>
                 <span className="text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{user.email}</span>
               </div>
-              <StatusChip status={user.role === 'Admin' ? 'completed' : 'new'} label={user.role} />
-              <Button size="sm" variant="default" onClick={logout} title="Log Out">
+              <span className="app-navbar__role">
+                <StatusChip status={user.role === 'Admin' ? 'completed' : 'new'} label={user.role} />
+              </span>
+              <Button size="sm" variant="default" onClick={logout} title="Log Out" className="app-navbar__logout">
                 <LogOut size={16} />
                 <span className="hidden sm:inline">Logout</span>
               </Button>

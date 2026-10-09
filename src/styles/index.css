@@ -149,10 +149,36 @@
   overflow-x: hidden;
 }
 
+/* Keep page content from forcing the app wider than the viewport. */
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100%;
+}
+
+.app-main,
+.app-content,
+.app-content > *,
+.app-content .grid > *,
+.app-content .flex > * {
+  min-width: 0;
+}
+
+.app-content img,
+.app-content video {
+  max-width: 100%;
+}
+
 /* ===== Mobile Sidebar Behavior (≤768px) ===== */
 @media (max-width: 767.98px) {
   .app-container {
     flex-direction: column;
+  }
+
+  .app-main {
+    width: 100%;
   }
 
   .app-sidebar {
@@ -174,7 +200,7 @@
   }
 
   .app-content {
-    padding: 0.75rem;
+    padding: 0.75rem max(0.75rem, env(safe-area-inset-left));
   }
 
   /* Mobile typography adjustments */
@@ -237,6 +263,33 @@
   .pos-table th {
     white-space: nowrap;
   }
+
+  .pos-table-wrapper {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+  }
+
+  .pos-table {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .data-table__actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .data-table__pagination {
+    justify-content: center;
+  }
+
+  .app-content .flex {
+    flex-wrap: wrap;
+  }
+
+  .app-content .flex > * {
+    max-width: 100%;
+  }
 }
 
 /* ===== Responsive Modals ===== */
@@ -244,13 +297,29 @@
   .pos-modal-overlay {
     padding: 0.5rem;
     align-items: flex-end; /* slide-up style on mobile */
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .pos-modal-dialog {
     max-width: 100% !important;
-    max-height: 92vh;
+    max-height: calc(100vh - 1rem);
+    max-height: calc(100dvh - 1rem - env(safe-area-inset-top));
     border-radius: 20px 20px 6px 6px;
-    padding: 1rem;
+    padding: 1rem max(1rem, env(safe-area-inset-right)) 1rem max(1rem, env(safe-area-inset-left));
+    margin: auto 0 0;
+  }
+
+  .pos-modal-dialog > .flex {
+    align-items: flex-start;
+  }
+
+  .pos-modal-dialog .grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pos-modal-dialog .pos-btn {
+    max-width: 100%;
   }
 }
 
@@ -276,9 +345,86 @@
 
 /* ===== Responsive Cards ===== */
 @media (max-width: 639.98px) {
+  .app-navbar {
+    padding: 0.55rem 0.65rem !important;
+  }
+
+  .app-navbar__user {
+    gap: 0.35rem;
+  }
+
+  .app-navbar__logout {
+    min-width: 42px;
+    padding: 0.45rem !important;
+  }
+
   .pos-card {
     padding: 0.85rem;
     border-radius: 12px;
+  }
+
+  .pos-btn {
+    white-space: normal;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .app-content .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-content form .grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-content h1,
+  .app-content h2,
+  .app-content h3,
+  .app-content p {
+    overflow-wrap: anywhere;
+  }
+
+  .app-content .pos-title {
+    line-height: 1.2;
+  }
+
+  .app-content .pos-input,
+  .app-content .pos-select,
+  .app-content .pos-textarea {
+    min-width: 0;
+  }
+
+  .app-content .pos-table {
+    font-size: 0.78rem;
+  }
+
+  .app-content .pos-table th,
+  .app-content .pos-table td {
+    padding: 0.45rem 0.55rem;
+  }
+
+  .data-table__pagination {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .app-content .pos-table th,
+  .app-content .pos-table td {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 379.98px) {
+  .app-content {
+    padding: 0.65rem;
+  }
+
+  .app-navbar__role {
+    display: none;
+  }
+
+  .app-content .flex.items-center.justify-between {
+    gap: 0.5rem;
   }
 }
 
