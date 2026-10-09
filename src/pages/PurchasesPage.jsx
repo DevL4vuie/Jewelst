@@ -236,13 +236,12 @@ export default function PurchasesPage() {
 
             <div className="flex flex-col gap-2">
               {batchItems.map((item, idx) => (
-                <div key={idx} className="flex flex-wrap items-end gap-2 p-2" style={{ background: 'var(--paper)', borderRadius: '10px', border: '1.5px solid var(--ink)' }}>
-                  <div className="flex-1 w-full">
-                    <label className="pos-label text-xs">Sandal Variant</label>
-                    <select
-                      className="pos-select"
-                      style={{ minHeight: '38px', fontSize: '0.85rem' }}
+                <div key={idx} className="purchase-batch-item-row p-2" style={{ background: 'var(--paper)', borderRadius: '10px', border: '1.5px solid var(--ink)' }}>
+                  <div className="purchase-batch-item-row__variant">
+                    <Select
+                      label="Sandal Variant"
                       value={item.variant_id}
+                      style={{ minHeight: '38px', fontSize: '0.85rem' }}
                       onChange={(e) => {
                         const updated = [...batchItems];
                         updated[idx].variant_id = e.target.value;
@@ -257,10 +256,10 @@ export default function PurchasesPage() {
                           </option>
                         );
                       })}
-                    </select>
+                    </Select>
                   </div>
 
-                  <div style={{ minWidth: '80px', flex: '0 0 auto' }}>
+                  <div className="purchase-batch-item-row__quantity">
                     <label className="pos-label text-xs">Quantity</label>
                     <input
                       type="number"
@@ -275,7 +274,7 @@ export default function PurchasesPage() {
                     />
                   </div>
 
-                  <div style={{ minWidth: '100px', flex: '0 0 auto' }}>
+                  <div className="purchase-batch-item-row__price">
                     <label className="pos-label text-xs">Unit Purchase Price</label>
                     <input
                       type="number"
@@ -295,8 +294,8 @@ export default function PurchasesPage() {
                       size="sm"
                       variant="danger"
                       type="button"
-                      className="pos-btn--icon"
-                      style={{ width: '36px', height: '36px', alignSelf: 'flex-end' }}
+                      className="pos-btn--icon purchase-batch-item-row__remove"
+                      style={{ width: '36px', height: '36px' }}
                       onClick={() => handleRemoveItemRow(idx)}
                     >
                       <Trash2 size={14} />
@@ -318,13 +317,12 @@ export default function PurchasesPage() {
 
             <div className="flex flex-col gap-2">
               {batchExpenses.map((exp, idx) => (
-                <div key={idx} className="flex flex-wrap items-end gap-2 p-2" style={{ background: 'var(--paper)', borderRadius: '10px', border: '1.5px solid var(--ink)' }}>
-                  <div style={{ minWidth: '120px', flex: '1 1 120px' }}>
-                    <label className="pos-label text-xs">Expense Type</label>
-                    <select
-                      className="pos-select"
-                      style={{ minHeight: '38px', fontSize: '0.85rem' }}
+                <div key={idx} className="purchase-batch-expense-row p-2" style={{ background: 'var(--paper)', borderRadius: '10px', border: '1.5px solid var(--ink)' }}>
+                  <div className="purchase-batch-expense-row__type">
+                    <Select
+                      label="Expense Type"
                       value={exp.type}
+                      style={{ minHeight: '38px', fontSize: '0.85rem' }}
                       onChange={(e) => {
                         const updated = [...batchExpenses];
                         updated[idx].type = e.target.value;
@@ -337,10 +335,10 @@ export default function PurchasesPage() {
                       <option value="Transportation">Transportation</option>
                       <option value="Freight Cargo">Freight Cargo</option>
                       <option value="Other">Other</option>
-                    </select>
+                    </Select>
                   </div>
 
-                  <div style={{ minWidth: '100px', flex: '0 0 auto' }}>
+                  <div className="purchase-batch-expense-row__amount">
                     <label className="pos-label text-xs">Amount (₱)</label>
                     <input
                       type="number"
@@ -355,7 +353,7 @@ export default function PurchasesPage() {
                     />
                   </div>
 
-                  <div className="flex-1">
+                  <div className="purchase-batch-expense-row__notes">
                     <label className="pos-label text-xs">Expense Notes</label>
                     <input
                       type="text"
@@ -375,7 +373,7 @@ export default function PurchasesPage() {
                     size="sm"
                     variant="danger"
                     type="button"
-                    className="pos-btn--icon"
+                    className="pos-btn--icon purchase-batch-expense-row__remove"
                     style={{ width: '36px', height: '36px', alignSelf: 'flex-end' }}
                     onClick={() => handleRemoveExpenseRow(idx)}
                   >
@@ -389,7 +387,7 @@ export default function PurchasesPage() {
           {/* Landed Cost Calculation Live Summary */}
           <div style={{ background: 'var(--mint-soft)', padding: '1rem', borderRadius: '14px', border: '2px solid var(--ink)', marginBottom: '1.25rem' }}>
             <div className="font-bold text-sm mb-1">LANDED COST SUMMARY</div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold purchase-batch-summary">
               <div>Total Pairs: <span>{totalQuantity}</span></div>
               <div>Base Cost: <span>{formatCurrency(totalPurchaseCost)}</span></div>
               <div>Allocated Exp / Pair: <span>{formatCurrency(allocatedExpensePerPair)}</span></div>
@@ -397,7 +395,7 @@ export default function PurchasesPage() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 purchase-batch-actions">
             <Button onClick={() => setBatchModalOpen(false)}>Cancel</Button>
             <Button type="submit" variant="primary">
               Finalize & Save Batch ({formatCurrency(totalLandedBatch)})

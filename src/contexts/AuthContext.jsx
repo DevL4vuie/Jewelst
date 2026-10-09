@@ -3,6 +3,13 @@ import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
 
+const mapAuthUser = (authUser) => ({
+  id: authUser.id,
+  email: authUser.email,
+  full_name: authUser.user_metadata?.full_name || authUser.email,
+  role: authUser.user_metadata?.role || 'Admin'
+});
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -14,32 +21,36 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let active = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
       if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email,
-          full_name: session.user.user_metadata?.full_name || session.user.email,
-          role: session.user.user_metadata?.role || 'Admin'
-        });
+        setUser(mapAuthUser(session.user));
+      } else {
+        setUser(null);
       }
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email,
-          full_name: session.user.user_metadata?.full_name || session.user.email,
-          role: session.user.user_metadata?.role || 'Admin'
-        });
-      } else {
-        setUser(null);
-      }
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session }, error }) => {
+        if (!active) return;
+        if (error) {
+          console.error('Failed to restore authentication session:', error);
+        }
+        setUser(session?.user ? mapAuthUser(session.user) : null);
+        setLoading(false);
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error('Failed to restore authentication session:', error);
+        setLoading(false);
+      });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email, password) => {

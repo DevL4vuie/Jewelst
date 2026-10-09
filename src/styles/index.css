@@ -171,6 +171,45 @@ body,
   max-width: 100%;
 }
 
+.purchase-batch-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(90px, 0.8fr) minmax(130px, 1fr) 36px;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.purchase-batch-item-row__variant,
+.purchase-batch-item-row__quantity,
+.purchase-batch-item-row__price,
+.purchase-batch-expense-row__type,
+.purchase-batch-expense-row__amount,
+.purchase-batch-expense-row__notes {
+  min-width: 0;
+}
+
+.purchase-batch-item-row__variant .w-full,
+.purchase-batch-expense-row__type .w-full {
+  margin-bottom: 0;
+}
+
+.purchase-batch-item-row__remove,
+.purchase-batch-expense-row__remove {
+  justify-self: center;
+  align-self: end;
+}
+
+.purchase-batch-expense-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(100px, auto) minmax(140px, 2fr) 36px;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.purchase-batch-summary > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* ===== Mobile Sidebar Behavior (≤768px) ===== */
 @media (max-width: 767.98px) {
   .app-container {
@@ -283,17 +322,13 @@ body,
     justify-content: center;
   }
 
-  .app-content .flex {
-    flex-wrap: wrap;
-  }
-
-  .app-content .flex > * {
-    max-width: 100%;
+  .app-content .flex.flex-wrap {
+    row-gap: 0.65rem;
   }
 }
 
 /* ===== Responsive Modals ===== */
-@media (max-width: 639.98px) {
+@media (max-width: 767.98px) {
   .pos-modal-overlay {
     padding: 0.5rem;
     align-items: flex-end; /* slide-up style on mobile */
@@ -312,6 +347,13 @@ body,
 
   .pos-modal-dialog > .flex {
     align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .pos-modal-dialog > .flex .pos-title {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .pos-modal-dialog .grid-cols-2 {
@@ -320,6 +362,53 @@ body,
 
   .pos-modal-dialog .pos-btn {
     max-width: 100%;
+  }
+
+  .pos-modal-dialog form > .flex.justify-end {
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .pos-modal-dialog form > .flex.justify-end .pos-btn {
+    flex: 1 1 8rem;
+  }
+
+  .purchase-batch-item-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 36px;
+    align-items: end;
+  }
+
+  .purchase-batch-item-row__variant {
+    grid-column: 1 / -1;
+  }
+
+  .purchase-batch-item-row__quantity {
+    grid-column: 1;
+  }
+
+  .purchase-batch-item-row__price {
+    grid-column: 2;
+  }
+
+  .purchase-batch-item-row__remove {
+    grid-column: 3;
+  }
+
+  .purchase-batch-expense-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 36px;
+  }
+
+  .purchase-batch-expense-row__type,
+  .purchase-batch-expense-row__notes {
+    grid-column: 1 / -1;
+  }
+
+  .purchase-batch-expense-row__amount {
+    grid-column: 1 / 3;
+  }
+
+  .purchase-batch-expense-row__remove {
+    grid-column: 3;
   }
 }
 

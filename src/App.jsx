@@ -24,7 +24,14 @@ import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
 
 function ProtectedRoute({ children, adminOnly = false }) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="pos-bg flex items-center justify-center" style={{ minHeight: '100vh', padding: '1rem' }}>
+        <p role="status" aria-live="polite" className="font-bold">Restoring your session...</p>
+      </div>
+    );
+  }
   if (!user) {
     return <Navigate to="/login" replace />;
   }

@@ -228,6 +228,79 @@ h1, h2, h3, h4, h5, h6, .pos-title {
   transition: outline 0.12s;
 }
 
+.pos-select-control {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.pos-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.pos-select-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pos-select-trigger__label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pos-select-placeholder {
+  opacity: 0.6;
+}
+
+.pos-select-menu {
+  position: fixed;
+  z-index: 1200;
+  padding: 0.25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 0 3px 0 var(--ink);
+}
+
+.pos-select-option {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 0.55rem 0.7rem;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.pos-select-option:hover,
+.pos-select-option:focus-visible,
+.pos-select-option.selected {
+  background: var(--light-blue);
+  outline: none;
+}
+
+.pos-select-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .pos-textarea {
   min-height: 80px;
   resize: vertical;
