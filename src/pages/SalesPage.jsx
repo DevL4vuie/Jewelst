@@ -7,7 +7,7 @@ import DataTable from '../components/shared/DataTable';
 import ThermalReceiptModal from '../components/shared/ThermalReceiptModal';
 import Modal from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
-import { formatCurrency } from '../lib/calculationUtils';
+import { formatCurrency, formatJewelsTransactionId } from '../lib/calculationUtils';
 import { ShoppingBag, Ban, Printer, CheckCircle } from 'lucide-react';
 
 export default function SalesPage() {
@@ -18,9 +18,9 @@ export default function SalesPage() {
 
   const [voidModalOpen, setVoidModalOpen] = useState(false);
   const [saleToVoid, setSaleToVoid] = useState(null);
-  const [voidReason, setVoidReason] = useState('Customer exchange / cashier correction');
+  const [voidReason, setVoidReason] = useState('');
 
-  const salesRows = data.sales.map(s => {
+  const salesLines = data.sales.map(s => {
     const v = data.variants.find(item => item.id === s.variant_id);
     const des = v ? data.designs.find(d => d.id === v.design_id) : null;
     const cust = s.customer_id ? data.customers.find(c => c.id === s.customer_id) : null;
@@ -33,20 +33,78 @@ export default function SalesPage() {
       color: v?.color || '-',
       customerName: cust?.name || 'Walk-in',
       totalAmount: Number(s.selling_price) * Number(s.quantity),
-      grossProfit
+      grossProfit,
+      receiptItem: {
+        productName: des?.name || 'Unknown Design',
+        variantInfo: `Size ${v?.size || '-'}, ${v?.color || '-'}`,
+        quantity: Number(s.quantity) || 0,
+        selling_price: Number(s.selling_price) || 0,
+        unit_cost: Number(s.unit_cost) || 0
+      }
+    };
+  });
+
+  const salesGroups = new Map();
+  salesLines.forEach(line => {
+    const legacyOrderNumber = line.notes?.match(/Converted from order ([^\s[]+)/)?.[1];
+    const orderRef = line.transaction_id
+      ? `transaction:${line.transaction_id}`
+      : line.order_id
+        ? `order:${line.order_id}`
+      : legacyOrderNumber
+        ? `order-number:${legacyOrderNumber}`
+        : `sale:${line.id}`;
+    const group = salesGroups.get(orderRef) || [];
+    group.push(line);
+    salesGroups.set(orderRef, group);
+  });
+
+  const salesRows = Array.from(salesGroups.entries()).map(([groupKey, lines]) => {
+    const first = lines[0];
+    const quantity = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
+    const totalAmount = lines.reduce((sum, line) => sum + line.totalAmount, 0);
+    const totalCost = lines.reduce((sum, line) => sum + (Number(line.unit_cost) || 0) * (Number(line.quantity) || 0), 0);
+    const isOrder = groupKey.startsWith('order:') || groupKey.startsWith('order-number:');
+    const transactionId = groupKey.startsWith('transaction:')
+      ? groupKey.slice('transaction:'.length)
+      : '';
+    const allVoided = lines.every(line => line.status === 'Voided');
+    const receiptItems = lines.map(line => line.receiptItem);
+    const productNames = [...new Set(lines.map(line => line.designName))];
+
+    return {
+      ...first,
+      id: isOrder ? groupKey : first.id,
+      saleIds: lines.map(line => line.id),
+      orderNumber: first.order_number || (isOrder ? groupKey.replace(/^order(-number)?:/, '') : ''),
+      transactionId,
+      saleReference: formatJewelsTransactionId(
+        transactionId || first.order_id || first.order_number || first.id
+      ),
+      designName: productNames.join(', '),
+      size: lines.length === 1 ? first.size : `${lines.length} items`,
+      color: lines.length === 1 ? first.color : '',
+      quantity,
+      totalAmount,
+      selling_price: quantity ? totalAmount / quantity : 0,
+      unit_cost: quantity ? totalCost / quantity : 0,
+      grossProfit: totalAmount - totalCost,
+      status: allVoided ? 'Voided' : first.status,
+      receiptItems,
+      searchText: `${first.customerName} ${productNames.join(' ')} ${first.order_number || ''} ${transactionId}`
     };
   });
 
   const handleOpenVoid = (sale) => {
     setSaleToVoid(sale);
-    setVoidReason('Customer returned / cashier error');
+    setVoidReason('');
     setVoidModalOpen(true);
   };
 
   const handleConfirmVoid = (e) => {
     e.preventDefault();
     if (saleToVoid) {
-      voidSale(saleToVoid.id, voidReason);
+      voidSale(saleToVoid.saleIds, voidReason);
     }
     setVoidModalOpen(false);
   };
@@ -55,10 +113,14 @@ export default function SalesPage() {
     setSelectedSaleForReceipt({
       id: r.id,
       sale_date: r.sale_date,
+      order_number: r.saleReference,
+      transaction_id: r.saleReference,
+      items: r.receiptItems,
       productName: r.designName,
-      variantInfo: `Size ${r.size}, ${r.color}`,
+      variantInfo: r.receiptItems.length === 1 ? r.receiptItems[0].variantInfo : '',
       quantity: r.quantity,
-      selling_price: r.selling_price,
+      selling_price: r.quantity ? r.totalAmount / r.quantity : 0,
+      totalAmount: r.totalAmount,
       payment_method: r.payment_method,
       sales_channel: r.sales_channel
     });
@@ -72,7 +134,9 @@ export default function SalesPage() {
       render: (r) => (
         <div>
           <div className="font-bold text-sm">{r.designName}</div>
-          <div className="text-xs text-muted">Size {r.size} • {r.color}</div>
+          {r.saleReference
+            ? <div className="text-xs text-muted">{r.saleReference}</div>
+            : <div className="text-xs text-muted">Size {r.size} • {r.color}</div>}
         </div>
       )
     },
@@ -142,7 +206,7 @@ export default function SalesPage() {
         <DataTable
           columns={columns}
           data={salesRows}
-          searchKey="designName"
+          searchKey="searchText"
           searchPlaceholder="Search sales by product, customer..."
           exportFileName="Jewels_Sales_History"
           exportSheetName="Sales"
@@ -163,7 +227,7 @@ export default function SalesPage() {
             </div>
 
             <div className="mb-3 text-sm font-bold">
-              Sale Ref: #{saleToVoid.id} • {saleToVoid.designName} (Size {saleToVoid.size}) • {formatCurrency(saleToVoid.totalAmount)}
+              Sale Ref: #{saleToVoid.saleReference} • {saleToVoid.designName} • {formatCurrency(saleToVoid.totalAmount)}
             </div>
 
             <Input
@@ -190,6 +254,11 @@ export default function SalesPage() {
         onClose={() => setReceiptOpen(false)}
         saleDetails={selectedSaleForReceipt}
         businessName={data.settings.business_name}
+        businessDescription={data.settings.receipt_subtitle}
+        businessAddress={data.settings.receipt_address}
+        businessPhone={data.settings.receipt_phone}
+        thankYouMessage={data.settings.receipt_thank_you}
+        warrantyNote={data.settings.receipt_warranty_note}
       />
     </div>
   );

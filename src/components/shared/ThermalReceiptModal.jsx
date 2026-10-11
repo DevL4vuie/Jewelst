@@ -8,9 +8,29 @@ export default function ThermalReceiptModal({
   isOpen,
   onClose,
   saleDetails,
-  businessName = "Jewel's Sandals"
+  businessName = "Jewel's Sandals",
+  businessDescription = 'Boutique Sandal Management',
+  businessAddress = 'Taguig City, Metro Manila',
+  businessPhone = '(02) 8888-SANDAL',
+  thankYouMessage = 'Thank you for shopping with us!',
+  warrantyNote = 'Please keep this receipt for warranty/exchange.',
+  receiptType = 'sale'
 }) {
   if (!saleDetails) return null;
+
+  const isGiveaway = receiptType === 'giveaway';
+  const receiptItems = saleDetails.items?.length
+    ? saleDetails.items
+    : [{
+        productName: saleDetails.productName || 'Sandal Variant',
+        variantInfo: saleDetails.variantInfo,
+        quantity: saleDetails.quantity || 1,
+        selling_price: saleDetails.selling_price || 0
+      }];
+  const totalAmount = saleDetails.totalAmount ?? receiptItems.reduce(
+    (total, item) => total + (Number(item.quantity) || 0) * (Number(item.selling_price) || 0),
+    0
+  );
 
   const handlePrint = () => {
     window.print();
@@ -22,9 +42,13 @@ export default function ThermalReceiptModal({
         <div style={{ color: 'var(--mint)', marginBottom: '0.25rem' }}>
           <CheckCircle size={40} />
         </div>
-        <h3 className="pos-title text-lg" style={{ margin: 0 }}>Transaction Successful!</h3>
+        <h3 className="pos-title text-lg" style={{ margin: 0 }}>
+          {isGiveaway ? 'Giveaway Recorded' : 'Transaction Successful!'}
+        </h3>
         <p className="text-sm text-muted" style={{ margin: '0.25rem 0 0 0' }}>
-          Receipt generated for sale #{saleDetails.id?.slice(-6) || 'RECEIPT'}
+          {isGiveaway
+            ? `Receipt for ${saleDetails.sponsorName || 'partner'}`
+            : `Receipt generated for sale #${saleDetails.id?.slice(-6) || 'RECEIPT'}`}
         </p>
       </div>
 
@@ -44,47 +68,60 @@ export default function ThermalReceiptModal({
       >
         <div className="text-center mb-2">
           <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>{businessName}</div>
-          <div>Boutique Sandal Management</div>
-          <div>Taguig City, Metro Manila</div>
-          <div>Tel: (02) 8888-SANDAL</div>
+          {businessDescription && <div>{businessDescription}</div>}
+          {businessAddress && <div>{businessAddress}</div>}
+          {businessPhone && <div>Tel: {businessPhone}</div>}
         </div>
 
         <div style={{ borderBottom: '1px dashed #1d2a57', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
           <div>Date: {saleDetails.sale_date || new Date().toLocaleDateString()}</div>
-          <div>Ref: {saleDetails.id || 'TXN-' + Date.now()}</div>
-          <div>Payment: {saleDetails.payment_method || 'Cash'}</div>
-          <div>Channel: {saleDetails.sales_channel || 'In Person'}</div>
+          <div>Ref: {saleDetails.transaction_id || saleDetails.order_number || saleDetails.id || 'TXN-' + Date.now()}</div>
+          {isGiveaway ? (
+            <>
+              <div>Partner: {saleDetails.sponsorName || 'Partner'}</div>
+              {saleDetails.notes && <div>Campaign: {saleDetails.notes}</div>}
+            </>
+          ) : (
+            <>
+              <div>Payment: {saleDetails.payment_method || 'Cash'}</div>
+              <div>Channel: {saleDetails.sales_channel || 'In Person'}</div>
+            </>
+          )}
         </div>
 
         <div style={{ marginBottom: '0.5rem' }}>
           <div className="flex justify-between font-bold" style={{ borderBottom: '1px solid #1d2a57', paddingBottom: '2px', marginBottom: '4px' }}>
             <span>Item</span>
-            <span>Qty x Price</span>
+            <span>{isGiveaway ? 'Qty x Cost' : 'Qty x Price'}</span>
             <span>Total</span>
           </div>
 
-          <div className="flex justify-between" style={{ padding: '2px 0' }}>
-            <span>{saleDetails.productName || 'Sandal Variant'}</span>
-            <span>{saleDetails.quantity} x {formatCurrency(saleDetails.selling_price)}</span>
-            <span className="font-bold">{formatCurrency((saleDetails.quantity || 1) * (saleDetails.selling_price || 0))}</span>
-          </div>
-          {saleDetails.variantInfo && (
-            <div className="text-xs text-muted" style={{ paddingLeft: '4px' }}>
-              ({saleDetails.variantInfo})
-            </div>
-          )}
+          {receiptItems.map((item, index) => (
+            <React.Fragment key={`${item.productName}-${item.variantInfo || ''}-${index}`}>
+              <div className="flex justify-between" style={{ padding: '2px 0' }}>
+                <span>{item.productName}</span>
+                <span>{item.quantity} x {formatCurrency(item.selling_price)}</span>
+                <span className="font-bold">{formatCurrency((Number(item.quantity) || 0) * (Number(item.selling_price) || 0))}</span>
+              </div>
+              {item.variantInfo && (
+                <div className="text-xs text-muted" style={{ paddingLeft: '4px' }}>
+                  ({item.variantInfo})
+                </div>
+              )}
+            </React.Fragment>
+          ))}
         </div>
 
         <div style={{ borderTop: '1px dashed #1d2a57', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
           <div className="flex justify-between font-bold text-base">
-            <span>TOTAL AMOUNT:</span>
-            <span>{formatCurrency((saleDetails.quantity || 1) * (saleDetails.selling_price || 0))}</span>
+            <span>{isGiveaway ? 'MARKETING COST:' : 'TOTAL AMOUNT:'}</span>
+            <span>{formatCurrency(totalAmount)}</span>
           </div>
         </div>
 
         <div className="text-center mt-3 text-xs" style={{ borderTop: '1px dashed #1d2a57', paddingTop: '0.5rem' }}>
-          <div>Thank you for shopping with us!</div>
-          <div>Please keep this receipt for warranty/exchange.</div>
+          {thankYouMessage && <div>{thankYouMessage}</div>}
+          {warrantyNote && <div>{warrantyNote}</div>}
         </div>
       </div>
 

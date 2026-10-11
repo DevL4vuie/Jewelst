@@ -2,16 +2,21 @@ import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { Input, Select } from '../components/ui/Input';
+import { Input, Select, Textarea } from '../components/ui/Input';
 import StatusChip from '../components/ui/StatusChip';
 import DataTable from '../components/shared/DataTable';
-import { Settings, Save, History, Database, CheckCircle } from 'lucide-react';
+import { Settings, Save, History, Database, CheckCircle, Trash2 } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { data, updateSettings } = useData();
+  const { data, updateSettings, clearActivityLog } = useData();
 
   const [form, setForm] = useState({
     business_name: data.settings.business_name || "Jewel's Sandals",
+    receipt_subtitle: data.settings.receipt_subtitle ?? 'Boutique Sandal Management',
+    receipt_address: data.settings.receipt_address ?? 'Taguig City, Metro Manila',
+    receipt_phone: data.settings.receipt_phone ?? '(02) 8888-SANDAL',
+    receipt_thank_you: data.settings.receipt_thank_you ?? 'Thank you for shopping with us!',
+    receipt_warranty_note: data.settings.receipt_warranty_note ?? 'Please keep this receipt for warranty/exchange.',
     currency: data.settings.currency || 'PHP',
     slow_mover_days: String(data.settings.slow_mover_days || 30),
     default_reorder_level: String(data.settings.default_reorder_level || 5),
@@ -24,6 +29,11 @@ export default function SettingsPage() {
     e.preventDefault();
     updateSettings({
       business_name: form.business_name,
+      receipt_subtitle: form.receipt_subtitle,
+      receipt_address: form.receipt_address,
+      receipt_phone: form.receipt_phone,
+      receipt_thank_you: form.receipt_thank_you,
+      receipt_warranty_note: form.receipt_warranty_note,
       currency: form.currency,
       slow_mover_days: Number(form.slow_mover_days) || 30,
       default_reorder_level: Number(form.default_reorder_level) || 5,
@@ -31,6 +41,13 @@ export default function SettingsPage() {
     });
     setSavedMsg(true);
     setTimeout(() => setSavedMsg(false), 3000);
+  };
+
+  const handleClearActivityLog = () => {
+    if (data.activity_log.length === 0) return;
+    if (window.confirm(`Clear all ${data.activity_log.length} activity log entries? This cannot be undone.`)) {
+      clearActivityLog();
+    }
   };
 
   const activityColumns = [
@@ -79,6 +96,43 @@ export default function SettingsPage() {
                 onChange={(e) => setForm({ ...form, business_name: e.target.value })}
               />
 
+              <h3 className="pos-title text-sm mt-4 mb-2">Receipt Header</h3>
+              <Input
+                label="Business Description"
+                value={form.receipt_subtitle}
+                onChange={(e) => setForm({ ...form, receipt_subtitle: e.target.value })}
+                placeholder="e.g. Boutique Sandal Management"
+              />
+
+              <Input
+                label="Address / Location"
+                value={form.receipt_address}
+                onChange={(e) => setForm({ ...form, receipt_address: e.target.value })}
+                placeholder="e.g. Taguig City, Metro Manila"
+              />
+
+              <Input
+                label="Telephone / Contact"
+                value={form.receipt_phone}
+                onChange={(e) => setForm({ ...form, receipt_phone: e.target.value })}
+                placeholder="e.g. (02) 8888-SANDAL"
+              />
+
+              <h3 className="pos-title text-sm mt-4 mb-2">Receipt Footer</h3>
+              <Textarea
+                label="Thank-you Message"
+                value={form.receipt_thank_you}
+                onChange={(e) => setForm({ ...form, receipt_thank_you: e.target.value })}
+                placeholder="e.g. Thank you for shopping with us!"
+              />
+
+              <Textarea
+                label="Warranty / Exchange Note"
+                value={form.receipt_warranty_note}
+                onChange={(e) => setForm({ ...form, receipt_warranty_note: e.target.value })}
+                placeholder="e.g. Please keep this receipt for warranty/exchange."
+              />
+
               <Input
                 label="Currency Symbol / Code"
                 required
@@ -122,14 +176,26 @@ export default function SettingsPage() {
         {/* Activity Log (2 cols) */}
         <div style={{ gridColumn: 'span 2' }}>
           <Card tape="pink">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <History size={18} />
                 <h2 className="pos-title text-lg" style={{ margin: 0 }}>Activity Audit Log</h2>
               </div>
-              <span className="text-xs text-muted font-bold">
-                {data.activity_log.length} logged system events
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted font-bold">
+                  {data.activity_log.length} logged system events
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="danger"
+                  disabled={data.activity_log.length === 0}
+                  onClick={handleClearActivityLog}
+                >
+                  <Trash2 size={14} />
+                  <span>Clear Logs</span>
+                </Button>
+              </div>
             </div>
 
             <DataTable

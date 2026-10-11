@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Button from '../ui/Button';
 import ExcelExportBtn from './ExcelExportBtn';
 
@@ -37,12 +37,10 @@ export default function DataTable({
     <div className="w-full">
       {/* Header controls: Search and Export */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-3">
-        <div className="relative flex-1" style={{ maxWidth: '380px' }}>
-          <Search size={18} style={{ position: 'absolute', left: '12px', top: '13px', color: 'rgba(29, 42, 87, 0.5)' }} />
+        <div className="flex-1" style={{ maxWidth: '380px' }}>
           <input
             type="text"
             className="pos-input"
-            style={{ paddingLeft: '2.5rem' }}
             placeholder={searchPlaceholder}
             value={searchTerm}
             onChange={(e) => {

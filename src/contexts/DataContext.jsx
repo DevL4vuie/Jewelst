@@ -1,15 +1,115 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { calculateLandedCost } from '../lib/calculationUtils';
+import { calculateLandedCost, createTransactionId } from '../lib/calculationUtils';
+import { deleteLocalImage } from '../lib/localImageStorage';
+import { useAuth } from './AuthContext';
 
 const DataContext = createContext(null);
 
-const STORAGE_KEY = 'jewelst_sandal_system_data_v3';
+const DATA_COLLECTIONS = [
+  'categories',
+  'designs',
+  'variants',
+  'purchases',
+  'sales',
+  'orders',
+  'customers',
+  'sponsors',
+  'sponsored_items',
+  'expenses',
+  'capital_entries',
+  'stock_adjustments',
+  'activity_log'
+];
+
+const createRecordId = prefix => (
+  `${prefix}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+);
+
+async function loadSharedData() {
+  if (!supabase) throw new Error('Supabase is not configured.');
+
+  const tables = [
+    'categories', 'customers', 'sponsors', 'designs', 'variants',
+    'purchases', 'purchase_items', 'purchase_expenses', 'sales', 'orders',
+    'order_items', 'sponsored_items', 'expenses', 'capital_entries',
+    'stock_adjustments', 'activity_log', 'business_settings'
+  ];
+  const results = await Promise.all(tables.map(async table => {
+    const rows = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data: page, error } = await supabase
+        .from(table)
+        .select('*')
+        .range(offset, offset + pageSize - 1);
+      if (error) return { data: null, error };
+      rows.push(...(page || []));
+      if (!page || page.length < pageSize) return { data: rows, error: null };
+    }
+  }));
+  const failedIndex = results.findIndex(result => result.error);
+  if (failedIndex >= 0) {
+    throw new Error(`Could not read ${tables[failedIndex]}: ${results[failedIndex].error.message}`);
+  }
+
+  const rowsByTable = Object.fromEntries(tables.map((table, index) => [table, results[index].data || []]));
+  const records = table => rowsByTable[table].map(row => ({
+    ...(row.data || {}),
+    id: row.id,
+    ...(row.category_id !== undefined ? { category_id: row.category_id } : {}),
+    ...(row.design_id !== undefined ? { design_id: row.design_id } : {}),
+    ...(row.variant_id !== undefined ? { variant_id: row.variant_id } : {}),
+    ...(row.customer_id !== undefined ? { customer_id: row.customer_id } : {}),
+    ...(row.sponsor_id !== undefined ? { sponsor_id: row.sponsor_id } : {})
+  }));
+  const purchaseItems = rowsByTable.purchase_items;
+  const purchaseExpenses = rowsByTable.purchase_expenses;
+  const orderItems = rowsByTable.order_items;
+
+  return {
+    settings: rowsByTable.business_settings.reduce((settings, row) => ({
+      ...settings,
+      [row.setting_key]: row.setting_value
+    }), {}),
+    categories: records('categories'),
+    customers: records('customers'),
+    sponsors: records('sponsors'),
+    designs: records('designs'),
+    variants: records('variants'),
+    purchases: records('purchases').map(purchase => ({
+      ...purchase,
+      items: purchaseItems
+        .filter(item => item.purchase_id === purchase.id)
+        .map(item => ({ ...(item.data || {}), id: item.id, variant_id: item.variant_id })),
+      expenses: purchaseExpenses
+        .filter(expense => expense.purchase_id === purchase.id)
+        .map(expense => ({ ...(expense.data || {}), id: expense.id }))
+    })),
+    sales: records('sales'),
+    orders: records('orders').map(order => ({
+      ...order,
+      items: orderItems
+        .filter(item => item.order_id === order.id)
+        .map(item => ({ ...(item.data || {}), id: item.id, variant_id: item.variant_id }))
+    })),
+    sponsored_items: records('sponsored_items'),
+    expenses: records('expenses'),
+    capital_entries: records('capital_entries'),
+    stock_adjustments: records('stock_adjustments'),
+    activity_log: records('activity_log')
+  };
+}
 
 // Empty starting data — no hardcoded seed records
 const initialData = {
   settings: {
     business_name: "Jewel's Sandals",
+    receipt_subtitle: 'Boutique Sandal Management',
+    receipt_address: 'Taguig City, Metro Manila',
+    receipt_phone: '(02) 8888-SANDAL',
+    receipt_thank_you: 'Thank you for shopping with us!',
+    receipt_warranty_note: 'Please keep this receipt for warranty/exchange.',
     currency: "PHP",
     currency_symbol: "₱",
     slow_mover_days: 30,
@@ -31,34 +131,230 @@ const initialData = {
   activity_log: []
 };
 
+function getStateChanges(previous, next) {
+  const changes = {};
+  DATA_COLLECTIONS.forEach(collection => {
+    const previousRecords = previous?.[collection] || [];
+    const nextRecords = next?.[collection] || [];
+    const previousById = new Map(previousRecords.map(record => [record.id, record]));
+    const nextById = new Map(nextRecords.map(record => [record.id, record]));
+    const upsert = nextRecords.filter(record => (
+      !previousById.has(record.id) ||
+      JSON.stringify(previousById.get(record.id)) !== JSON.stringify(record)
+    ));
+    const deleted = previousRecords
+      .filter(record => !nextById.has(record.id))
+      .map(record => record.id);
 
-
-
-export function DataProvider({ children }) {
-  const [data, setData] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn('Failed reading from localStorage', e);
+    if (upsert.length || deleted.length) {
+      changes[collection] = { upsert, delete: deleted };
     }
-    return initialData;
   });
 
-  // Save to localStorage on state change
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (e) {
-      console.error('Failed saving to localStorage', e);
+  const settingsChanges = {};
+  Object.entries(next?.settings || {}).forEach(([key, value]) => {
+    if (JSON.stringify(previous?.settings?.[key]) !== JSON.stringify(value)) {
+      settingsChanges[key] = value;
     }
-  }, [data]);
+  });
+
+  return {
+    changes,
+    settings: Object.keys(settingsChanges).length ? settingsChanges : null
+  };
+}
+
+function applyStateChanges(base, changes, settings) {
+  const merged = { ...base };
+  Object.entries(changes).forEach(([collection, delta]) => {
+    const deleted = new Set(delta.delete);
+    const upserts = new Map(delta.upsert.map(record => [record.id, record]));
+    const existing = base[collection] || [];
+    const ids = new Set(existing.map(record => record.id));
+    merged[collection] = existing
+      .filter(record => !deleted.has(record.id))
+      .map(record => upserts.get(record.id) || record);
+    delta.upsert.forEach(record => {
+      if (!ids.has(record.id) && !deleted.has(record.id)) merged[collection].push(record);
+    });
+  });
+  if (settings) merged.settings = { ...base.settings, ...settings };
+  return merged;
+}
+
+export function DataProvider({ children }) {
+  const { user, loading: authLoading } = useAuth();
+  const [data, setData] = useState(initialData);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [syncError, setSyncError] = useState('');
+  const [loadRetryCount, setLoadRetryCount] = useState(0);
+  const [syncRetryCount, setSyncRetryCount] = useState(0);
+  const [loadedUserId, setLoadedUserId] = useState(null);
+  const dataRef = useRef(data);
+  const persistedDataRef = useRef(null);
+  const writeInProgressRef = useRef(false);
+  const authUserIdRef = useRef(user?.id);
+  const loadGenerationRef = useRef(0);
+
+  dataRef.current = data;
+  authUserIdRef.current = user?.id;
+
+  useEffect(() => {
+    const generation = ++loadGenerationRef.current;
+    if (authLoading) return undefined;
+
+    let active = true;
+    setLoadError('');
+    setSyncError('');
+    persistedDataRef.current = null;
+    setLoadedUserId(null);
+
+    if (!user) {
+      setData(initialData);
+      setLoading(false);
+      return () => { active = false; };
+    }
+
+    if (!supabase) {
+      setLoadError('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then rebuild the app.');
+      setLoading(false);
+      return () => { active = false; };
+    }
+
+    setLoading(true);
+    loadSharedData()
+      .then(remoteData => {
+        if (!active || loadGenerationRef.current !== generation) return;
+
+        const normalizedData = {
+          ...initialData,
+          ...remoteData,
+          settings: { ...initialData.settings, ...remoteData.settings }
+        };
+        persistedDataRef.current = normalizedData;
+        setData(normalizedData);
+        setLoadedUserId(user.id);
+        setLoading(false);
+      })
+      .catch(error => {
+        if (!active || loadGenerationRef.current !== generation) return;
+        console.error('Could not load shared business data from Supabase:', error);
+        setLoadError(`Could not load business data from Supabase. ${error.message || 'Check the database setup and connection.'}`);
+        setLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [authLoading, user?.id, loadRetryCount]);
+
+  useEffect(() => {
+    if (!supabase || !user || loadedUserId !== user.id || !persistedDataRef.current) return undefined;
+
+    const generation = loadGenerationRef.current;
+    const syncUserId = user.id;
+    let active = true;
+    let refreshRequestId = 0;
+    const refreshFromRemote = async () => {
+      if (!active || writeInProgressRef.current) return;
+      const requestId = ++refreshRequestId;
+      const remoteData = await loadSharedData();
+      if (!active || requestId !== refreshRequestId ||
+          loadGenerationRef.current !== generation || authUserIdRef.current !== syncUserId) return;
+      const localChanges = getStateChanges(persistedDataRef.current, dataRef.current);
+      const normalizedRemote = {
+        ...initialData,
+        ...remoteData,
+        settings: { ...initialData.settings, ...remoteData.settings }
+      };
+      persistedDataRef.current = normalizedRemote;
+      setData(current => applyStateChanges(normalizedRemote, localChanges.changes, localChanges.settings));
+    };
+    const syncChannel = supabase.channel(`business-state-${user.id}`);
+    [
+      'categories', 'customers', 'sponsors', 'designs', 'variants',
+      'purchases', 'purchase_items', 'purchase_expenses', 'sales', 'orders',
+      'order_items', 'sponsored_items', 'expenses', 'capital_entries',
+      'stock_adjustments', 'activity_log', 'business_settings'
+    ].forEach(table => {
+      syncChannel.on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table
+      }, () => {
+        refreshFromRemote().catch(error => {
+          if (!active) return;
+          console.error('Could not refresh shared business data:', error);
+          setSyncError(`Live data refresh failed. ${error.message || 'Check your connection and retry.'}`);
+        });
+      });
+    });
+    syncChannel
+      .subscribe(status => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setSyncError('Live updates are disconnected. Reload the page to restore synchronization.');
+        }
+      });
+
+    return () => {
+      active = false;
+      supabase.removeChannel(syncChannel);
+    };
+  }, [user?.id, loadedUserId]);
+
+  useEffect(() => {
+    if (!supabase || !user || loadedUserId !== user.id || !persistedDataRef.current || writeInProgressRef.current) return;
+
+    const generation = loadGenerationRef.current;
+    const syncUserId = user.id;
+    const snapshot = data;
+    const { changes, settings } = getStateChanges(persistedDataRef.current, snapshot);
+    if (Object.keys(changes).length === 0 && !settings) return;
+
+    writeInProgressRef.current = true;
+    supabase.rpc('apply_jewelst_changes', {
+      p_changes: changes,
+      p_settings: settings
+    }).then(async ({ error }) => {
+      if (error) throw error;
+      if (loadGenerationRef.current !== generation || authUserIdRef.current !== syncUserId) return;
+      const remoteData = await loadSharedData();
+      if (loadGenerationRef.current !== generation || authUserIdRef.current !== syncUserId) return;
+      const normalizedRemote = {
+        ...initialData,
+        ...remoteData,
+        settings: { ...initialData.settings, ...remoteData.settings }
+      };
+      persistedDataRef.current = normalizedRemote;
+      const changesDuringWrite = getStateChanges(snapshot, dataRef.current);
+      setData(applyStateChanges(normalizedRemote, changesDuringWrite.changes, changesDuringWrite.settings));
+      setSyncError('');
+    }).catch(error => {
+      if (loadGenerationRef.current !== generation || authUserIdRef.current !== syncUserId) return;
+      console.error('Could not save business data to Supabase:', error);
+      setSyncError(`Changes are not saved to Supabase. ${error.message || 'Check your connection and retry.'}`);
+    }).finally(() => {
+      writeInProgressRef.current = false;
+      if (loadGenerationRef.current !== generation && authUserIdRef.current) {
+        setSyncRetryCount(count => count + 1);
+      }
+    });
+  }, [data, loadedUserId, syncRetryCount, user?.id]);
+
+  const retryDataSync = () => {
+    if (loadError) {
+      setLoadRetryCount(count => count + 1);
+    } else {
+      setSyncRetryCount(count => count + 1);
+    }
+    setLoadError('');
+    setSyncError('');
+  };
 
   const logActivity = (action, details) => {
     const entry = {
-      id: 'act-' + Date.now(),
+      id: createRecordId('act'),
       timestamp: new Date().toISOString(),
-      user: 'Admin (Jewel)',
+      user: user?.full_name || user?.email || 'Authenticated user',
       action,
       details
     };
@@ -66,6 +362,10 @@ export function DataProvider({ children }) {
       ...prev,
       activity_log: [entry, ...prev.activity_log]
     }));
+  };
+
+  const clearActivityLog = () => {
+    setData(prev => ({ ...prev, activity_log: [] }));
   };
 
   const normalizeVariant = (variant = {}) => {
@@ -161,7 +461,7 @@ export function DataProvider({ children }) {
 
   // Categories
   const addCategory = (cat) => {
-    const newCat = { ...cat, id: 'cat-' + Date.now(), archived_at: null };
+    const newCat = { ...cat, id: createRecordId('cat'), archived_at: null };
     setData(prev => ({ ...prev, categories: [...prev.categories, newCat] }));
     logActivity('Category Created', `Added category: ${newCat.name}`);
     return newCat;
@@ -208,7 +508,7 @@ export function DataProvider({ children }) {
 
   // Designs
   const addDesign = (des) => {
-    const newDes = { ...des, id: 'des-' + Date.now(), archived_at: null };
+    const newDes = { ...des, id: createRecordId('des'), archived_at: null };
     setData(prev => ({ ...prev, designs: [...prev.designs, newDes] }));
     logActivity('Design Created', `Added design: ${newDes.name}`);
     return newDes;
@@ -238,12 +538,30 @@ export function DataProvider({ children }) {
     logActivity('Design Restored', `Restored design ID: ${id}`);
   };
 
-  const deleteDesign = (id) => {
+  const deleteDesign = async (id) => {
     // Check if any variants depend on it
     const hasVariants = data.variants.some(v => v.design_id === id);
     if (hasVariants) {
-      alert('Cannot delete: This design has active or archived variants.');
-      return false;
+      throw new Error('Cannot delete: This design has active or archived variants.');
+    }
+    const design = data.designs.find(item => item.id === id);
+    if (design?.photo_path) {
+      if (!supabase) throw new Error('Cannot delete this design image because Supabase is not configured.');
+      const { error } = await supabase.storage
+        .from('design-images')
+        .remove([design.photo_path]);
+      if (error) {
+        console.error('Could not delete the design image from Supabase Storage:', error);
+        throw new Error(`The design was not deleted because its image could not be removed from storage. ${error.message}`);
+      }
+    }
+    if (design?.photo_ref) {
+      try {
+        await deleteLocalImage(design.photo_ref);
+      } catch (error) {
+        console.error('Could not delete the design image from local storage:', error);
+        throw new Error(`The design was not deleted because its locally stored image could not be removed. ${error.message}`);
+      }
     }
     setData(prev => ({
       ...prev,
@@ -258,7 +576,7 @@ export function DataProvider({ children }) {
     const normalized = normalizeVariant(varItem);
     const newVar = {
       ...normalized,
-      id: 'var-' + Date.now(),
+      id: createRecordId('var'),
       archived_at: null,
       unit_cost: normalized.unit_cost || 0,
       retail_price: normalized.retail_price || normalized.selling_price || 0,
@@ -307,11 +625,14 @@ export function DataProvider({ children }) {
   };
 
   const deleteVariant = (id) => {
-    // Check if variant has purchase or sale history
+    // Preserve variant references used by any historical inventory record.
     const inSales = data.sales.some(s => s.variant_id === id);
     const inPurchases = data.purchases.some(p => p.items.some(it => it.variant_id === id));
-    if (inSales || inPurchases) {
-      alert('Cannot delete: This variant has historical sales or purchase records. It can only be kept archived to preserve data integrity.');
+    const inOrders = data.orders.some(order => order.items?.some(item => item.variant_id === id));
+    const inSponsoredItems = data.sponsored_items.some(item => item.variant_id === id);
+    const inAdjustments = data.stock_adjustments.some(item => item.variant_id === id);
+    if (inSales || inPurchases || inOrders || inSponsoredItems || inAdjustments) {
+      alert('Cannot delete: This variant has historical inventory records. It can only be kept archived to preserve data integrity.');
       return false;
     }
     setData(prev => ({
@@ -331,7 +652,7 @@ export function DataProvider({ children }) {
     const itemsWithCost = batchData.items.map((item, idx) => {
       const unitPrice = Number(item.unit_purchase_price) || 0;
       return {
-        id: 'pitem-' + Date.now() + '-' + idx,
+        id: createRecordId(`pitem-${idx}`),
         variant_id: item.variant_id,
         quantity: Number(item.quantity) || 0,
         unit_purchase_price: unitPrice,
@@ -342,7 +663,7 @@ export function DataProvider({ children }) {
 
     const newBatch = {
       ...batchData,
-      id: 'batch-' + Date.now(),
+      id: createRecordId('batch'),
       status: 'Finalized',
       items: itemsWithCost
     };
@@ -361,8 +682,7 @@ export function DataProvider({ children }) {
     const saleType = saleData.sale_type || 'Retail';
     const available = getVariantStock(saleData.variant_id);
     if ((Number(saleData.quantity) || 0) > available) {
-      alert(`Cannot complete sale: requested ${saleData.quantity} pairs, but only ${available} are in stock.`);
-      return false;
+      return { error: `Cannot complete sale: requested ${saleData.quantity} pairs, but only ${available} are in stock.` };
     }
 
     const variantPrice = getVariantPriceByType(variant, saleType);
@@ -370,7 +690,7 @@ export function DataProvider({ children }) {
     const currentCost = getVariantCost(saleData.variant_id);
     const newSale = {
       ...saleData,
-      id: 'sale-' + Date.now(),
+      id: createRecordId('sale'),
       sale_type: saleType,
       selling_price: effectivePrice,
       unit_cost: currentCost,
@@ -385,12 +705,15 @@ export function DataProvider({ children }) {
     return newSale;
   };
 
-  const voidSale = (id, reason = 'Entry error') => {
+  const voidSale = (idOrIds, reason = 'Entry error') => {
+    const ids = new Set(Array.isArray(idOrIds) ? idOrIds : [idOrIds]);
     setData(prev => ({
       ...prev,
-      sales: prev.sales.map(s => s.id === id ? { ...s, status: 'Voided', notes: `${s.notes || ''} [Voided: ${reason}]` } : s)
+      sales: prev.sales.map(s => ids.has(s.id)
+        ? { ...s, status: 'Voided', notes: `${s.notes || ''} [Voided: ${reason}]` }
+        : s)
     }));
-    logActivity('Sale Voided', `Voided sale ID: ${id}. Reason: ${reason}`);
+    logActivity('Sale Voided', `Voided ${ids.size} sale line(s). Reason: ${reason}`);
   };
 
   // Orders
@@ -398,7 +721,7 @@ export function DataProvider({ children }) {
     const orderNumber = 'ORD-' + new Date().getFullYear() + '-' + String(data.orders.length + 1).padStart(3, '0');
     const newOrder = {
       ...orderData,
-      id: 'ord-' + Date.now(),
+      id: createRecordId('ord'),
       order_number: orderNumber,
       order_date: orderData.order_date || new Date().toISOString().slice(0, 10),
       status: orderData.status || 'Pending'
@@ -421,29 +744,58 @@ export function DataProvider({ children }) {
 
   const finalizeOrderToSale = (orderId, paymentMethod = 'Cash') => {
     const order = data.orders.find(o => o.id === orderId);
-    if (!order) return false;
+    if (!order || !Array.isArray(order.items) || order.items.length === 0) {
+      return 'Cannot complete this order: no order items were found.';
+    }
+    if (order.status === 'Completed' || order.status === 'Cancelled') {
+      return `Cannot complete this order because its status is ${order.status.toLowerCase()}.`;
+    }
 
-    // Record each item as a sale
-    order.items.forEach(it => {
-      recordSale({
-        sale_date: new Date().toISOString().slice(0, 10),
-        customer_id: order.customer_id,
-        variant_id: it.variant_id,
-        quantity: it.quantity,
-        selling_price: it.selling_price,
-        payment_method: paymentMethod,
-        sales_channel: 'Online',
-        notes: `Converted from order ${order.order_number}`
-      });
-    });
+    const quantityByVariant = order.items.reduce((totals, item) => {
+      totals[item.variant_id] = (totals[item.variant_id] || 0) + (Number(item.quantity) || 0);
+      return totals;
+    }, {});
+    for (const [variantId, quantity] of Object.entries(quantityByVariant)) {
+      const available = getVariantStock(variantId);
+      if (quantity < 1 || quantity > available) {
+        const variant = data.variants.find(item => item.id === variantId);
+        return `Cannot complete order: requested ${quantity} pair(s) of size ${variant?.size || '?'} (${variant?.color || 'unknown'}), but only ${available} are in stock.`;
+      }
+    }
 
-    updateOrderStatus(orderId, 'Completed');
+    const saleDate = new Date().toISOString().slice(0, 10);
+    const saleType = order.sale_type || 'Retail';
+    const transactionId = createTransactionId();
+    const sales = order.items.map((item, index) => ({
+      id: createRecordId(`sale-${index}`),
+      order_id: order.id,
+      order_number: order.order_number,
+      transaction_id: transactionId,
+      sale_date: saleDate,
+      customer_id: order.customer_id,
+      variant_id: item.variant_id,
+      quantity: Number(item.quantity),
+      selling_price: Number(item.selling_price) || getVariantPrice(item.variant_id, saleType),
+      sale_type: saleType,
+      unit_cost: getVariantCost(item.variant_id),
+      payment_method: paymentMethod,
+      sales_channel: 'Online',
+      notes: `Converted from order ${order.order_number}`,
+      status: 'Completed'
+    }));
+
+    setData(prev => ({
+      ...prev,
+      sales: [...sales, ...prev.sales],
+      orders: prev.orders.map(item => item.id === orderId ? { ...item, status: 'Completed' } : item)
+    }));
+    logActivity('Order Completed', `Completed ${order.order_number} with ${sales.length} item line(s), total ₱${order.total_amount}`);
     return true;
   };
 
   // Customers
   const addCustomer = (cust) => {
-    const newCust = { ...cust, id: 'cust-' + Date.now(), archived_at: null };
+    const newCust = { ...cust, id: createRecordId('cust'), archived_at: null };
     setData(prev => ({ ...prev, customers: [...prev.customers, newCust] }));
     logActivity('Customer Added', `Added customer: ${newCust.name}`);
     return newCust;
@@ -484,7 +836,7 @@ export function DataProvider({ children }) {
 
   // Sponsors & Sponsored Items
   const addSponsor = (spon) => {
-    const newSpon = { ...spon, id: 'spon-' + Date.now(), archived_at: null };
+    const newSpon = { ...spon, id: createRecordId('spon'), archived_at: null };
     setData(prev => ({ ...prev, sponsors: [...prev.sponsors, newSpon] }));
     logActivity('Sponsor Added', `Added sponsor: ${newSpon.name}`);
     return newSpon;
@@ -530,7 +882,7 @@ export function DataProvider({ children }) {
     const cost = getVariantCost(itemData.variant_id);
     const newSp = {
       ...itemData,
-      id: 'spitem-' + Date.now(),
+      id: createRecordId('spitem'),
       unit_cost: cost
     };
     setData(prev => ({
@@ -541,9 +893,41 @@ export function DataProvider({ children }) {
     return newSp;
   };
 
+  const recordSponsoredItems = (items) => {
+    const giveawayId = createTransactionId();
+    const quantityByVariant = items.reduce((totals, item) => {
+      totals[item.variant_id] = (totals[item.variant_id] || 0) + Number(item.quantity || 0);
+      return totals;
+    }, {});
+    for (const [variantId, quantity] of Object.entries(quantityByVariant)) {
+      const available = getVariantStock(variantId);
+      if (quantity > available) {
+        const variant = data.variants.find(item => item.id === variantId);
+        return {
+          error: `Cannot give away ${quantity} pair(s) of size ${variant?.size || '?'} (${variant?.color || 'unknown'}); only ${available} are available.`
+        };
+      }
+    }
+
+    const newItems = items.map(item => ({
+      ...item,
+      giveaway_id: giveawayId,
+      id: createRecordId('spitem'),
+      unit_cost: getVariantCost(item.variant_id)
+    }));
+    setData(prev => ({
+      ...prev,
+      sponsored_items: [...newItems, ...prev.sponsored_items]
+    }));
+    const pairCount = newItems.reduce((total, item) => total + Number(item.quantity), 0);
+    const totalCost = newItems.reduce((total, item) => total + item.unit_cost * Number(item.quantity), 0);
+    logActivity('Sponsored Items Given', `Recorded ${pairCount} giveaway pair(s) for sponsor, marketing cost: ₱${totalCost.toFixed(2)}`);
+    return { items: newItems };
+  };
+
   // Expenses
   const addExpense = (exp) => {
-    const newExp = { ...exp, id: 'opex-' + Date.now(), archived_at: null };
+    const newExp = { ...exp, id: createRecordId('opex'), archived_at: null };
     setData(prev => ({ ...prev, expenses: [newExp, ...prev.expenses] }));
     logActivity('Expense Added', `Added ${newExp.category} expense: ₱${newExp.amount}`);
     return newExp;
@@ -582,7 +966,7 @@ export function DataProvider({ children }) {
 
   // Capital Entries
   const addCapitalEntry = (cap) => {
-    const newCap = { ...cap, id: 'cap-' + Date.now(), archived_at: null };
+    const newCap = { ...cap, id: createRecordId('cap'), archived_at: null };
     setData(prev => ({ ...prev, capital_entries: [newCap, ...prev.capital_entries] }));
     logActivity('Capital Entry Added', `${newCap.entry_type}: ₱${newCap.amount} via ${newCap.payment_method}`);
     return newCap;
@@ -614,7 +998,7 @@ export function DataProvider({ children }) {
 
   // Stock Adjustments
   const addStockAdjustment = (adj) => {
-    const newAdj = { ...adj, id: 'adj-' + Date.now() };
+    const newAdj = { ...adj, id: createRecordId('adj') };
     setData(prev => ({
       ...prev,
       stock_adjustments: [newAdj, ...prev.stock_adjustments]
@@ -749,6 +1133,10 @@ export function DataProvider({ children }) {
   return (
     <DataContext.Provider value={{
       data,
+      loading,
+      loadError,
+      syncError,
+      retryDataSync,
       getVariantStock,
       getVariantCost,
       computeFinancials,
@@ -792,6 +1180,7 @@ export function DataProvider({ children }) {
       restoreSponsor,
       deleteSponsor,
       recordSponsoredItem,
+      recordSponsoredItems,
       // Expenses
       addExpense,
       updateExpense,
@@ -807,7 +1196,8 @@ export function DataProvider({ children }) {
       addStockAdjustment,
       // Settings & Log
       updateSettings,
-      logActivity
+      logActivity,
+      clearActivityLog
     }}>
       {children}
     </DataContext.Provider>

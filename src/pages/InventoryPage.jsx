@@ -15,8 +15,8 @@ export default function InventoryPage() {
   const [adjustModalOpen, setAdjustModalOpen] = useState(false);
   const [selectedVariantForAdj, setSelectedVariantForAdj] = useState(null);
   const [adjustForm, setAdjustForm] = useState({
-    quantity_change: '1',
-    reason: 'Correction',
+    quantity_change: '',
+    reason: '',
     notes: ''
   });
 
@@ -55,8 +55,8 @@ export default function InventoryPage() {
   const handleOpenAdjust = (row) => {
     setSelectedVariantForAdj(row);
     setAdjustForm({
-      quantity_change: '1',
-      reason: 'Recount',
+      quantity_change: '',
+      reason: '',
       notes: ''
     });
     setAdjustModalOpen(true);
@@ -65,6 +65,10 @@ export default function InventoryPage() {
   const handleSaveAdjustment = (e) => {
     e.preventDefault();
     if (!selectedVariantForAdj) return;
+    if (!adjustForm.reason) {
+      alert('Select an adjustment reason.');
+      return;
+    }
 
     addStockAdjustment({
       adjust_date: new Date().toISOString().slice(0, 10),
@@ -209,6 +213,7 @@ export default function InventoryPage() {
               value={adjustForm.reason}
               onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })}
             >
+              <option value="" disabled>Select a reason</option>
               <option value="Recount">Recount (Physical Audit)</option>
               <option value="Damaged">Damaged Goods</option>
               <option value="Lost">Lost / Missing</option>

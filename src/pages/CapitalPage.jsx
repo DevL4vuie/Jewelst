@@ -15,10 +15,10 @@ export default function CapitalPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({
-    entry_date: new Date().toISOString().slice(0, 10),
-    entry_type: 'Capital In',
+    entry_date: '',
+    entry_type: '',
     amount: '',
-    payment_method: 'Bank Transfer',
+    payment_method: '',
     notes: ''
   });
 
@@ -31,16 +31,20 @@ export default function CapitalPage() {
 
   const handleSave = (e) => {
     e.preventDefault();
+    if (!form.entry_type || !form.payment_method) {
+      alert('Select a transaction type and payment method.');
+      return;
+    }
     addCapitalEntry({
       ...form,
       amount: Number(form.amount) || 0
     });
     setModalOpen(false);
     setForm({
-      entry_date: new Date().toISOString().slice(0, 10),
-      entry_type: 'Capital In',
+      entry_date: '',
+      entry_type: '',
       amount: '',
-      payment_method: 'Bank Transfer',
+      payment_method: '',
       notes: ''
     });
   };
@@ -95,7 +99,13 @@ export default function CapitalPage() {
             Capital Injections, Owner Withdrawals & Capital Recovery Tracking
           </p>
         </div>
-        <Button variant="primary" onClick={() => setModalOpen(true)}>
+        <Button
+          variant="primary"
+          onClick={() => {
+            setForm({ entry_date: '', entry_type: '', amount: '', payment_method: '', notes: '' });
+            setModalOpen(true);
+          }}
+        >
           <Plus size={18} />
           <span>Add Capital Entry</span>
         </Button>
@@ -162,6 +172,7 @@ export default function CapitalPage() {
               value={form.entry_type}
               onChange={(e) => setForm({ ...form, entry_type: e.target.value })}
             >
+              <option value="" disabled>Select a transaction type</option>
               <option value="Capital In">Capital In (Add Funds)</option>
               <option value="Owner Withdrawal">Owner Withdrawal (Draw)</option>
             </Select>
@@ -192,6 +203,7 @@ export default function CapitalPage() {
               value={form.payment_method}
               onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
             >
+              <option value="" disabled>Select a payment method</option>
               <option value="Bank Transfer">Bank Transfer</option>
               <option value="GCash">GCash</option>
               <option value="Cash">Cash</option>

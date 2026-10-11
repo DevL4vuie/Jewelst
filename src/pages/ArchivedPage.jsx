@@ -32,6 +32,7 @@ export default function ArchivedPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [deleteActionFn, setDeleteActionFn] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
 
   const archivedCategories = data.categories.filter(c => c.archived_at);
   const archivedDesigns = data.designs.filter(d => d.archived_at);
@@ -42,9 +43,23 @@ export default function ArchivedPage() {
   const archivedCapital = data.capital_entries.filter(c => c.archived_at);
 
   const requestPermanentDelete = (item, deleteFn) => {
+    setDeleteError('');
     setItemToDelete(item);
     setDeleteActionFn(() => deleteFn);
     setConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteActionFn) return false;
+    setDeleteError('');
+    try {
+      const result = await deleteActionFn();
+      return result !== false;
+    } catch (error) {
+      console.error('Could not permanently delete archived record:', error);
+      setDeleteError(error.message || 'The record could not be permanently deleted. Please try again.');
+      return false;
+    }
   };
 
   return (
@@ -398,9 +413,8 @@ export default function ArchivedPage() {
       <ConfirmDialog
         isOpen={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        onConfirm={() => {
-          if (deleteActionFn) deleteActionFn();
-        }}
+        onConfirm={handleConfirmDelete}
+        errorMessage={deleteError}
         title="Permanent Record Deletion"
         message="This record will be permanently deleted. This action cannot be undone. Continue?"
         confirmText="Permanently Delete"

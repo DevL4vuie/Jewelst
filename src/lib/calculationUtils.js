@@ -53,3 +53,26 @@ export function formatTransactionId(value) {
   if (/^TXN-\d+$/i.test(str)) return str;
   return `TXN-${String(str).replace(/[^a-z0-9]/gi, '').slice(-6) || '0000'}`.toUpperCase();
 }
+
+export function createTransactionId() {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const randomValues = new Uint8Array(11);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(randomValues);
+  } else {
+    randomValues.forEach((_, index) => {
+      randomValues[index] = Math.floor(Math.random() * 256);
+    });
+  }
+  const suffix = Array.from(randomValues, value => alphabet[value % alphabet.length]).join('');
+  return `JEWELSET-${suffix}`;
+}
+
+export function formatJewelsTransactionId(value) {
+  if (!value) return createTransactionId();
+  const prefix = 'JEWELSET-';
+  const source = String(value).trim().toUpperCase();
+  if (source.startsWith(prefix) && source.length === 20) return source;
+  const suffix = source.replace(/[^A-Z0-9]/g, '').slice(-11).padStart(11, '0');
+  return `${prefix}${suffix}`;
+}

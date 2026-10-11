@@ -1,8 +1,9 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { DataProvider } from './contexts/DataContext';
+import { DataProvider, useData } from './contexts/DataContext';
 import AppLayout from './components/layout/AppLayout';
+import Button from './components/ui/Button';
 
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -25,6 +26,7 @@ import SettingsPage from './pages/SettingsPage';
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, isAdmin, loading } = useAuth();
+  const { loading: dataLoading, loadError, retryDataSync } = useData();
   if (loading) {
     return (
       <div className="pos-bg flex items-center justify-center" style={{ minHeight: '100vh', padding: '1rem' }}>
@@ -34,6 +36,21 @@ function ProtectedRoute({ children, adminOnly = false }) {
   }
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+  if (dataLoading) {
+    return (
+      <div className="pos-bg flex items-center justify-center" style={{ minHeight: '100vh', padding: '1rem' }}>
+        <p role="status" aria-live="polite" className="font-bold">Loading shared business data from Supabase...</p>
+      </div>
+    );
+  }
+  if (loadError) {
+    return (
+      <div className="pos-bg flex flex-col items-center justify-center gap-3" style={{ minHeight: '100vh', padding: '1rem' }}>
+        <p role="alert" className="font-bold">{loadError}</p>
+        <Button variant="primary" onClick={retryDataSync}>Retry Connection</Button>
+      </div>
+    );
   }
   if (adminOnly && !isAdmin) {
     return <Navigate to="/pos" replace />;

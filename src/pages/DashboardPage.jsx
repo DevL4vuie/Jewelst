@@ -4,6 +4,7 @@ import { useData } from '../contexts/DataContext';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import StatusChip from '../components/ui/StatusChip';
+import DesignImage from '../components/shared/DesignImage';
 import { formatCurrency } from '../lib/calculationUtils';
 import {
   TrendingUp,
@@ -73,7 +74,7 @@ export default function DashboardPage() {
     const design = data.designs.find(d => d.id === dId);
     return {
       designName: design?.name || 'Design',
-      photo_url: design?.photo_url,
+      design,
       units
     };
   }).sort((a, b) => b.units - a.units).slice(0, 4);
@@ -313,8 +314,8 @@ export default function DashboardPage() {
                   {bestSellers.map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2" style={{ borderBottom: '1.5px dashed rgba(29, 42, 87, 0.2)' }}>
                       <div className="flex items-center gap-2">
-                        {item.photo_url ? (
-                          <img src={item.photo_url} alt="" style={{ width: '32px', height: '32px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid var(--ink)' }} />
+                        {item.design?.photo_path || item.design?.photo_url || item.design?.photo_ref ? (
+                          <DesignImage design={item.design} alt="" style={{ width: '32px', height: '32px', borderRadius: '8px', objectFit: 'cover', border: '1.5px solid var(--ink)' }} />
                         ) : (
                           <span style={{ fontSize: '1.2rem' }}>👡</span>
                         )}

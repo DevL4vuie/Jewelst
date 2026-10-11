@@ -7,7 +7,7 @@ import StatusChip from '../ui/StatusChip';
 
 export default function Navbar({ onToggleSidebar, isSidebarOpen }) {
   const { user, logout } = useAuth();
-  const { data } = useData();
+  const { data, syncError, retryDataSync } = useData();
 
   return (
     <header className="pos-card app-navbar" style={{ borderRadius: 0, borderTop: 0, borderLeft: 0, borderRight: 0, padding: '0.75rem 1rem', zIndex: 40 }}>
@@ -65,6 +65,15 @@ export default function Navbar({ onToggleSidebar, isSidebarOpen }) {
           )}
         </div>
       </div>
+      {syncError && (
+        <div
+          role="alert"
+          className="app-navbar__sync-error"
+        >
+          <span>{syncError}</span>
+          <Button size="sm" variant="danger" onClick={retryDataSync}>Retry Sync</Button>
+        </div>
+      )}
     </header>
   );
 }

@@ -15,16 +15,20 @@ export default function UsersPage() {
   ]);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ full_name: '', email: '', role: 'Cashier' });
+  const [form, setForm] = useState({ full_name: '', email: '', role: '' });
 
   const handleAddUser = (e) => {
     e.preventDefault();
+    if (!form.role) {
+      alert('Select a role for this staff account.');
+      return;
+    }
     setUsers(prev => [
       ...prev,
       { ...form, id: 'u-' + Date.now(), status: 'Active' }
     ]);
     setModalOpen(false);
-    setForm({ full_name: '', email: '', role: 'Cashier' });
+    setForm({ full_name: '', email: '', role: '' });
   };
 
   const columns = [
@@ -73,7 +77,13 @@ export default function UsersPage() {
             System Users, Role-Based Access Guards & Authorization
           </p>
         </div>
-        <Button variant="primary" onClick={() => setModalOpen(true)}>
+        <Button
+          variant="primary"
+          onClick={() => {
+            setForm({ full_name: '', email: '', role: '' });
+            setModalOpen(true);
+          }}
+        >
           <Plus size={18} />
           <span>Add Staff Account</span>
         </Button>
@@ -153,6 +163,7 @@ export default function UsersPage() {
             value={form.role}
             onChange={(e) => setForm({ ...form, role: e.target.value })}
           >
+            <option value="" disabled>Select a role</option>
             <option value="Cashier">Cashier</option>
             <option value="Staff">Warehouse Staff</option>
             <option value="Admin">Administrator (Owner)</option>

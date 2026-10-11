@@ -17,26 +17,24 @@ export default function PurchasesPage() {
   const [selectedBatchForView, setSelectedBatchForView] = useState(null);
 
   // New Batch Form State
-  const [batchDate, setBatchDate] = useState(new Date().toISOString().slice(0, 10));
+  const [batchDate, setBatchDate] = useState('');
   const [supplier, setSupplier] = useState('');
   const [batchNotes, setBatchNotes] = useState('');
 
   // Items in batch
   const [batchItems, setBatchItems] = useState([
-    { variant_id: data.variants[0]?.id || '', quantity: '20', unit_purchase_price: '350' }
+    { variant_id: '', quantity: '', unit_purchase_price: '' }
   ]);
 
   // Batch expenses (Shipping, Packaging, Freight, etc.)
-  const [batchExpenses, setBatchExpenses] = useState([
-    { type: 'Shipping', amount: '1200', notes: 'Courier cargo delivery' }
-  ]);
+  const [batchExpenses, setBatchExpenses] = useState([]);
 
   const activeVariants = data.variants.filter(v => !v.archived_at);
 
   const handleAddItemRow = () => {
     setBatchItems(prev => [
       ...prev,
-      { variant_id: activeVariants[0]?.id || '', quantity: '10', unit_purchase_price: '350' }
+      { variant_id: '', quantity: '', unit_purchase_price: '' }
     ]);
   };
 
@@ -47,7 +45,7 @@ export default function PurchasesPage() {
   const handleAddExpenseRow = () => {
     setBatchExpenses(prev => [
       ...prev,
-      { type: 'Shipping', amount: '500', notes: '' }
+      { type: '', amount: '', notes: '' }
     ]);
   };
 
@@ -68,8 +66,14 @@ export default function PurchasesPage() {
       alert('Please enter a supplier name.');
       return;
     }
-    if (batchItems.length === 0) {
-      alert('Please add at least one product item to this batch.');
+    if (!batchDate || batchItems.length === 0 || batchItems.some(item => (
+      !item.variant_id || Number(item.quantity) < 1 || !item.unit_purchase_price
+    ))) {
+      alert('Enter a batch date and complete each product item with a variant, quantity, and unit purchase price.');
+      return;
+    }
+    if (batchExpenses.some(expense => !expense.type || !expense.amount)) {
+      alert('Complete the type and amount for each batch expense.');
       return;
     }
 
@@ -91,9 +95,11 @@ export default function PurchasesPage() {
     });
 
     setBatchModalOpen(false);
-    // Reset form
+    setBatchDate('');
     setSupplier('');
     setBatchNotes('');
+    setBatchItems([{ variant_id: '', quantity: '', unit_purchase_price: '' }]);
+    setBatchExpenses([]);
   };
 
   const batchesData = data.purchases.map(b => {
@@ -175,7 +181,17 @@ export default function PurchasesPage() {
             Supplier Batches, Expense Allocation & Landed Cost Per Pair
           </p>
         </div>
-        <Button variant="primary" onClick={() => setBatchModalOpen(true)}>
+        <Button
+          variant="primary"
+          onClick={() => {
+            setBatchDate('');
+            setSupplier('');
+            setBatchNotes('');
+            setBatchItems([{ variant_id: '', quantity: '', unit_purchase_price: '' }]);
+            setBatchExpenses([]);
+            setBatchModalOpen(true);
+          }}
+        >
           <Plus size={18} />
           <span>New Purchase Batch</span>
         </Button>
@@ -240,6 +256,7 @@ export default function PurchasesPage() {
                   <div className="purchase-batch-item-row__variant">
                     <Select
                       label="Sandal Variant"
+                      required
                       value={item.variant_id}
                       style={{ minHeight: '38px', fontSize: '0.85rem' }}
                       onChange={(e) => {
@@ -248,6 +265,7 @@ export default function PurchasesPage() {
                         setBatchItems(updated);
                       }}
                     >
+                      <option value="" disabled>Select a variant</option>
                       {activeVariants.map(v => {
                         const des = data.designs.find(d => d.id === v.design_id);
                         return (
@@ -321,6 +339,7 @@ export default function PurchasesPage() {
                   <div className="purchase-batch-expense-row__type">
                     <Select
                       label="Expense Type"
+                      required
                       value={exp.type}
                       style={{ minHeight: '38px', fontSize: '0.85rem' }}
                       onChange={(e) => {
@@ -329,6 +348,7 @@ export default function PurchasesPage() {
                         setBatchExpenses(updated);
                       }}
                     >
+                      <option value="" disabled>Select an expense type</option>
                       <option value="Shipping">Shipping</option>
                       <option value="Packaging">Packaging</option>
                       <option value="Tags & Boxes">Tags & Boxes</option>

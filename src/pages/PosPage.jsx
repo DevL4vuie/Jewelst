@@ -4,14 +4,15 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import StatusChip from '../components/ui/StatusChip';
 import ThermalReceiptModal from '../components/shared/ThermalReceiptModal';
-import { formatCurrency } from '../lib/calculationUtils';
+import NoticeModal from '../components/shared/NoticeModal';
+import DesignImage from '../components/shared/DesignImage';
+import { createTransactionId, formatCurrency } from '../lib/calculationUtils';
 import {
   ShoppingCart,
   Plus,
   Minus,
   Trash2,
   CheckCircle,
-  Search,
   User,
   CreditCard,
   DollarSign
@@ -24,14 +25,15 @@ export default function PosPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Cash');
-  const [salesChannel, setSalesChannel] = useState('In Person');
-  const [saleType, setSaleType] = useState('Retail');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [salesChannel, setSalesChannel] = useState('');
+  const [saleType, setSaleType] = useState('');
   const [notes, setNotes] = useState('');
 
   // Receipt modal state
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lastSaleDetails, setLastSaleDetails] = useState(null);
+  const [noticeMessage, setNoticeMessage] = useState('');
 
   // Filter designs
   const activeDesigns = data.designs.filter(d => !d.archived_at);
@@ -51,7 +53,7 @@ export default function PosPage() {
   const handleAddToCart = (variant, design) => {
     const availableStock = getVariantStock(variant.id);
     if (availableStock <= 0) {
-      alert(`Cannot add: Size ${variant.size} (${variant.color}) is out of stock.`);
+      setNoticeMessage(`Cannot add: Size ${variant.size} (${variant.color}) is out of stock.`);
       return;
     }
 
@@ -62,7 +64,7 @@ export default function PosPage() {
     const existingIndex = cart.findIndex(it => it.variantId === variant.id);
     if (existingIndex >= 0) {
       if (cart[existingIndex].quantity + 1 > availableStock) {
-        alert(`Cannot add more: Only ${availableStock} pairs available in stock.`);
+        setNoticeMessage(`Cannot add more: Only ${availableStock} pairs available in stock.`);
         return;
       }
       const updated = [...cart];
@@ -93,7 +95,7 @@ export default function PosPage() {
         const newQty = item.quantity + delta;
         if (newQty <= 0) return null;
         if (newQty > item.maxStock) {
-          alert(`Cannot exceed available stock of ${item.maxStock} pairs.`);
+          setNoticeMessage(`Cannot exceed available stock of ${item.maxStock} pairs.`);
           return item;
         }
         return { ...item, quantity: newQty };
@@ -106,16 +108,52 @@ export default function PosPage() {
     setCart(prev => prev.filter(it => it.variantId !== variantId));
   };
 
+  const handleSaleTypeChange = (event) => {
+    const nextSaleType = event.target.value;
+    setSaleType(nextSaleType);
+    setCart(items => items.map(item => {
+      const variant = data.variants.find(v => v.id === item.variantId);
+      if (!variant) return item;
+      const retailPrice = Number(variant.retail_price ?? variant.selling_price ?? 0);
+      const resellerPrice = Number(variant.reseller_price ?? variant.selling_price ?? 0);
+      return {
+        ...item,
+        saleType: nextSaleType,
+        sellingPrice: nextSaleType === 'Reseller'
+          ? (resellerPrice || retailPrice)
+          : (retailPrice || resellerPrice)
+      };
+    }));
+  };
+
   const cartTotal = cart.reduce((sum, it) => sum + (it.sellingPrice * it.quantity), 0);
   const totalItemCount = cart.reduce((sum, it) => sum + it.quantity, 0);
 
   const handleCheckout = () => {
     if (cart.length === 0) {
-      alert('Your cart is empty. Please select products to sell.');
+      setNoticeMessage('Your cart is empty. Please select products to sell.');
+      return;
+    }
+    if (!saleType || !salesChannel || !paymentMethod) {
+      setNoticeMessage('Select a sale type, channel, and payment method before completing the transaction.');
       return;
     }
 
+    const quantityByVariant = cart.reduce((totals, item) => {
+      totals[item.variantId] = (totals[item.variantId] || 0) + item.quantity;
+      return totals;
+    }, {});
+    for (const [variantId, quantity] of Object.entries(quantityByVariant)) {
+      const available = getVariantStock(variantId);
+      if (quantity > available) {
+        const item = cart.find(cartItem => cartItem.variantId === variantId);
+        setNoticeMessage(`Cannot complete sale: requested ${quantity} pairs of ${item?.designName || 'this product'}, size ${item?.size || '?'}, but only ${available} are in stock.`);
+        return;
+      }
+    }
+
     let completedSales = [];
+    const transactionId = createTransactionId();
 
     // Atomically process each cart item as a sale
     for (const item of cart) {
@@ -123,6 +161,7 @@ export default function PosPage() {
       const effectivePrice = Number(item.sellingPrice) || Number(variant?.retail_price ?? variant?.selling_price ?? 0) || 0;
       const sale = recordSale({
         sale_date: new Date().toISOString().slice(0, 10),
+        transaction_id: transactionId,
         customer_id: selectedCustomer || null,
         variant_id: item.variantId,
         quantity: item.quantity,
@@ -132,13 +171,18 @@ export default function PosPage() {
         sales_channel: salesChannel,
         notes: notes || 'POS counter sale'
       });
+      if (sale?.error) {
+        setNoticeMessage(sale.error);
+        return;
+      }
       if (sale) completedSales.push(sale);
     }
 
     // Set details for receipt modal
     const summaryItem = cart[0];
     setLastSaleDetails({
-      id: completedSales[0]?.id,
+      id: transactionId,
+      transaction_id: transactionId,
       sale_date: new Date().toLocaleDateString('en-PH'),
       productName: cart.length === 1 ? summaryItem.designName : `${summaryItem.designName} + ${cart.length - 1} more items`,
       variantInfo: cart.length === 1 ? `Size ${summaryItem.size}, ${summaryItem.color}` : `${totalItemCount} pairs total`,
@@ -150,6 +194,9 @@ export default function PosPage() {
 
     setCart([]);
     setNotes('');
+    setPaymentMethod('');
+    setSalesChannel('');
+    setSaleType('');
     setReceiptOpen(true);
   };
 
@@ -189,13 +236,12 @@ export default function PosPage() {
               ))}
             </div>
 
-            <div className="relative w-full" style={{ maxWidth: '220px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '10px', top: '14px', color: 'rgba(29, 42, 87, 0.4)' }} />
+            <div className="w-full" style={{ maxWidth: '220px' }}>
               <input
                 type="text"
                 placeholder="Search sandals..."
                 className="pos-input"
-                style={{ paddingLeft: '2.2rem', minHeight: '40px' }}
+                style={{ minHeight: '40px' }}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -216,9 +262,9 @@ export default function PosPage() {
                   onClick={() => handleOpenVariantPicker(design)}
                   title={`Click to pick size & color for ${design.name}`}
                 >
-                  {design.photo_url ? (
-                    <img
-                      src={design.photo_url}
+                  {design.photo_path || design.photo_url || design.photo_ref ? (
+                    <DesignImage
+                      design={design}
                       alt={design.name}
                       style={{
                         width: '100%',
@@ -352,8 +398,9 @@ export default function PosPage() {
                     className="pos-select"
                     style={{ minHeight: '38px', fontSize: '0.85rem' }}
                     value={saleType}
-                    onChange={(e) => setSaleType(e.target.value)}
+                    onChange={handleSaleTypeChange}
                   >
+                    <option value="" disabled>Select sale type</option>
                     <option value="Retail">Retail</option>
                     <option value="Reseller">Reseller</option>
                   </select>
@@ -366,6 +413,7 @@ export default function PosPage() {
                     value={salesChannel}
                     onChange={(e) => setSalesChannel(e.target.value)}
                   >
+                    <option value="" disabled>Select channel</option>
                     <option value="In Person">In Person</option>
                     <option value="Online">Online</option>
                   </select>
@@ -380,6 +428,7 @@ export default function PosPage() {
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                 >
+                  <option value="" disabled>Select payment method</option>
                   <option value="Cash">Cash</option>
                   <option value="GCash">GCash</option>
                   <option value="Bank Transfer">Bank Transfer</option>
@@ -475,6 +524,17 @@ export default function PosPage() {
         onClose={() => setReceiptOpen(false)}
         saleDetails={lastSaleDetails}
         businessName={data.settings.business_name}
+        businessDescription={data.settings.receipt_subtitle}
+        businessAddress={data.settings.receipt_address}
+        businessPhone={data.settings.receipt_phone}
+        thankYouMessage={data.settings.receipt_thank_you}
+        warrantyNote={data.settings.receipt_warranty_note}
+      />
+      <NoticeModal
+        isOpen={Boolean(noticeMessage)}
+        onClose={() => setNoticeMessage('')}
+        title="Unable to Complete Sale"
+        message={noticeMessage}
       />
     </div>
   );

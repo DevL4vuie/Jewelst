@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -6,6 +6,9 @@ import Modal from '../components/ui/Modal';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import StatusChip from '../components/ui/StatusChip';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import DesignImage from '../components/shared/DesignImage';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency } from '../lib/calculationUtils';
 import {
   Package,
@@ -18,6 +21,7 @@ import {
 } from 'lucide-react';
 
 export default function ProductsPage() {
+  const { user } = useAuth();
   const {
     data,
     getVariantStock,
@@ -40,28 +44,46 @@ export default function ProductsPage() {
     name: '',
     category_id: '',
     description: '',
-    photo_url: ''
+    photo_url: '',
+    photo_ref: '',
+    photo_path: ''
   });
+  const [designPhoto, setDesignPhoto] = useState(null);
+  const [designPhotoPreview, setDesignPhotoPreview] = useState('');
+  const [designSaveError, setDesignSaveError] = useState('');
+  const [savingDesign, setSavingDesign] = useState(false);
+  const designPhotoInputRef = useRef(null);
 
   // Variant modal state
   const [variantModalOpen, setVariantModalOpen] = useState(false);
   const [selectedDesignForVariant, setSelectedDesignForVariant] = useState(null);
   const [editingVariant, setEditingVariant] = useState(null);
   const [variantForm, setVariantForm] = useState({
-    size: '7',
-    color: 'Tan',
-    unit_cost: '250',
-    retail_price: '650',
-    reseller_price: '550',
-    reorder_level: '5'
+    size: '',
+    color: '',
+    unit_cost: '',
+    retail_price: '',
+    reseller_price: '',
+    reorder_level: ''
   });
 
   // Archive confirm dialog state
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [designToArchive, setDesignToArchive] = useState(null);
+  const [variantToArchive, setVariantToArchive] = useState(null);
 
   const activeCategories = data.categories.filter(c => !c.archived_at);
   const activeDesigns = data.designs.filter(d => !d.archived_at);
+
+  useEffect(() => {
+    if (!designPhoto) {
+      setDesignPhotoPreview('');
+      return undefined;
+    }
+    const objectUrl = URL.createObjectURL(designPhoto);
+    setDesignPhotoPreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [designPhoto]);
 
   const filteredDesigns = activeDesigns.filter(d => {
     if (selectedCategory !== 'all' && d.category_id !== selectedCategory) return false;
@@ -73,10 +95,14 @@ export default function ProductsPage() {
     setEditingDesign(null);
     setDesignForm({
       name: '',
-      category_id: activeCategories[0]?.id || '',
+      category_id: '',
       description: '',
-      photo_url: ''
+      photo_url: '',
+      photo_ref: '',
+      photo_path: ''
     });
+    setDesignPhoto(null);
+    setDesignSaveError('');
     setDesignModalOpen(true);
   };
 
@@ -86,31 +112,71 @@ export default function ProductsPage() {
       name: des.name,
       category_id: des.category_id,
       description: des.description || '',
-      photo_url: des.photo_url || ''
+      photo_url: des.photo_url || '',
+      photo_ref: des.photo_ref || '',
+      photo_path: des.photo_path || ''
     });
+    setDesignPhoto(null);
+    setDesignSaveError('');
     setDesignModalOpen(true);
   };
 
-  const handleSaveDesign = (e) => {
+  const handleSaveDesign = async (e) => {
     e.preventDefault();
-    if (editingDesign) {
-      updateDesign(editingDesign.id, designForm);
-    } else {
-      addDesign(designForm);
+    setDesignSaveError('');
+    if (!designForm.category_id) {
+      setDesignSaveError('Select a category before saving the design.');
+      return;
     }
-    setDesignModalOpen(false);
+    setSavingDesign(true);
+    try {
+      let payload = { ...designForm };
+      if (designPhoto) {
+        if (!supabase || !user?.id) {
+          throw new Error('Sign in and configure Supabase before uploading a design image.');
+        }
+        const extensionByType = {
+          'image/jpeg': 'jpg',
+          'image/png': 'png',
+          'image/webp': 'webp',
+          'image/gif': 'gif'
+        };
+        const extension = extensionByType[designPhoto.type];
+        if (!extension) throw new Error('Use a JPG, PNG, WebP, or GIF image.');
+
+        const uniqueId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const photoPath = `${user.id}/${uniqueId}.${extension}`;
+        const { error } = await supabase.storage
+          .from('design-images')
+          .upload(photoPath, designPhoto, { contentType: designPhoto.type });
+        if (error) throw error;
+        payload = { ...payload, photo_path: photoPath, photo_ref: '', photo_url: '' };
+      }
+      if (editingDesign) {
+        updateDesign(editingDesign.id, payload);
+      } else {
+        addDesign(payload);
+      }
+      setDesignModalOpen(false);
+      setDesignPhoto(null);
+    } catch (error) {
+      console.error('Could not save design:', error);
+      setDesignSaveError(error.message || 'The design could not be saved. Please try again.');
+    } finally {
+      setSavingDesign(false);
+    }
   };
 
   const handleOpenAddVariant = (design) => {
     setSelectedDesignForVariant(design);
     setEditingVariant(null);
     setVariantForm({
-      size: '7',
-      color: 'Tan',
-      unit_cost: '250',
-      retail_price: '650',
-      reseller_price: '550',
-      reorder_level: '5'
+      size: '',
+      color: '',
+      unit_cost: '',
+      retail_price: '',
+      reseller_price: '',
+      reorder_level: ''
     });
     setVariantModalOpen(true);
   };
@@ -195,9 +261,9 @@ export default function ProductsPage() {
               <div className="flex flex-col md:flex-row gap-4 items-start">
                 {/* Product Photo */}
                 <div style={{ width: '120px', height: '120px', flexShrink: 0, position: 'relative' }}>
-                  {design.photo_url ? (
-                    <img
-                      src={design.photo_url}
+                  {design.photo_path || design.photo_url || design.photo_ref ? (
+                    <DesignImage
+                      design={design}
                       alt={design.name}
                       style={{
                         width: '100%',
@@ -248,6 +314,7 @@ export default function ProductsPage() {
                         size="sm"
                         variant="danger"
                         onClick={() => {
+                          setVariantToArchive(null);
                           setDesignToArchive(design);
                           setArchiveConfirmOpen(true);
                         }}
@@ -330,7 +397,11 @@ export default function ProductsPage() {
                                   size="sm"
                                   variant="danger"
                                   style={{ padding: '0.15rem 0.5rem', fontSize: '0.75rem' }}
-                                  onClick={() => archiveVariant(v.id)}
+                                  onClick={() => {
+                                    setDesignToArchive(null);
+                                    setVariantToArchive(v);
+                                    setArchiveConfirmOpen(true);
+                                  }}
                                 >
                                   Archive
                                 </Button>
@@ -370,17 +441,77 @@ export default function ProductsPage() {
             value={designForm.category_id}
             onChange={(e) => setDesignForm({ ...designForm, category_id: e.target.value })}
           >
+            <option value="" disabled>Select a category</option>
             {activeCategories.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </Select>
 
-          <Input
-            label="Photo URL (Unsplash or image link)"
-            value={designForm.photo_url}
-            onChange={(e) => setDesignForm({ ...designForm, photo_url: e.target.value })}
-            placeholder="https://..."
-          />
+          <div className="design-image-field">
+            <label className="pos-label" htmlFor="design-photo">Design Image</label>
+            <input
+              id="design-photo"
+              ref={designPhotoInputRef}
+              className="design-image-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                e.target.value = '';
+                if (!file) return;
+                if (!file.type.startsWith('image/')) {
+                  setDesignSaveError('Choose a valid image file.');
+                  e.target.value = '';
+                  return;
+                }
+                if (file.size > 10 * 1024 * 1024) {
+                  setDesignSaveError('The design image must be 10 MB or smaller.');
+                  e.target.value = '';
+                  return;
+                }
+                setDesignSaveError('');
+                setDesignPhoto(file);
+              }}
+            />
+            <div className="design-image-actions">
+              <Button
+                type="button"
+                onClick={() => designPhotoInputRef.current?.click()}
+              >
+                {designPhotoPreview || designForm.photo_path || designForm.photo_ref || designForm.photo_url
+                  ? 'Replace Image'
+                  : 'Choose Image'}
+              </Button>
+              <span className="text-xs text-muted">
+                Upload from this device (up to 10 MB). The image is shared by every size and color variant.
+              </span>
+            </div>
+            {(designPhotoPreview || designForm.photo_path || designForm.photo_ref || designForm.photo_url) && (
+              <div className="design-image-preview">
+                {designPhotoPreview ? (
+                  <img src={designPhotoPreview} alt="Selected design" />
+                ) : (
+                  <DesignImage design={designForm} alt={designForm.name || 'Current design'} />
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="danger"
+                  onClick={() => {
+                    if (designPhotoPreview) {
+                      setDesignPhoto(null);
+                    } else {
+                      setDesignForm({ ...designForm, photo_ref: '', photo_url: '', photo_path: '' });
+                    }
+                  }}
+                >
+                  {designPhotoPreview ? 'Discard Replacement' : 'Remove Image'}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {designSaveError && <div className="order-form-error" role="alert">{designSaveError}</div>}
 
           <Textarea
             label="Description"
@@ -390,9 +521,9 @@ export default function ProductsPage() {
           />
 
           <div className="flex justify-end gap-2 mt-4">
-            <Button onClick={() => setDesignModalOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary">
-              {editingDesign ? 'Update Design' : 'Create Design'}
+            <Button type="button" onClick={() => setDesignModalOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="primary" disabled={savingDesign}>
+              {savingDesign ? 'Saving...' : editingDesign ? 'Update Design' : 'Create Design'}
             </Button>
           </div>
         </form>
@@ -465,13 +596,20 @@ export default function ProductsPage() {
       {/* Archive Confirmation Dialog */}
       <ConfirmDialog
         isOpen={archiveConfirmOpen}
-        onClose={() => setArchiveConfirmOpen(false)}
-        onConfirm={() => {
-          if (designToArchive) archiveDesign(designToArchive.id);
+        onClose={() => {
+          setArchiveConfirmOpen(false);
+          setDesignToArchive(null);
+          setVariantToArchive(null);
         }}
-        title="Archive Sandal Design?"
-        message={`Are you sure you want to archive "${designToArchive?.name}"? It will be hidden from active lists but kept in historical reports and can be restored from the Archived Records page.`}
-        confirmText="Archive Design"
+        onConfirm={() => {
+          if (variantToArchive) archiveVariant(variantToArchive.id);
+          else if (designToArchive) archiveDesign(designToArchive.id);
+        }}
+        title={variantToArchive ? 'Archive Product Variant?' : 'Archive Sandal Design?'}
+        message={variantToArchive
+          ? `Are you sure you want to archive size ${variantToArchive.size} (${variantToArchive.color})? It will be hidden from active lists but retained in historical records and can be restored from Archived Records.`
+          : `Are you sure you want to archive "${designToArchive?.name}"? It will be hidden from active lists but kept in historical reports and can be restored from the Archived Records page.`}
+        confirmText={variantToArchive ? 'Archive Variant' : 'Archive Design'}
         variant="danger"
       />
     </div>

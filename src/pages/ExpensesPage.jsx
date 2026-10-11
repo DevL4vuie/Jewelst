@@ -16,10 +16,10 @@ export default function ExpensesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [form, setForm] = useState({
-    expense_date: new Date().toISOString().slice(0, 10),
-    category: 'Packaging',
+    expense_date: '',
+    category: '',
     amount: '',
-    payment_method: 'Cash',
+    payment_method: '',
     description: ''
   });
 
@@ -39,10 +39,10 @@ export default function ExpensesPage() {
   const handleOpenAdd = () => {
     setEditingExpense(null);
     setForm({
-      expense_date: new Date().toISOString().slice(0, 10),
-      category: 'Packaging',
+      expense_date: '',
+      category: '',
       amount: '',
-      payment_method: 'Cash',
+      payment_method: '',
       description: ''
     });
     setModalOpen(true);
@@ -62,6 +62,10 @@ export default function ExpensesPage() {
 
   const handleSave = (e) => {
     e.preventDefault();
+    if (!form.category || !form.payment_method) {
+      alert('Select an expense category and payment method.');
+      return;
+    }
     if (editingExpense) {
       updateExpense(editingExpense.id, {
         ...form,
@@ -72,6 +76,7 @@ export default function ExpensesPage() {
         ...form,
         amount: Number(form.amount) || 0
       });
+      setForm({ expense_date: '', category: '', amount: '', payment_method: '', description: '' });
     }
     setModalOpen(false);
   };
@@ -181,6 +186,7 @@ export default function ExpensesPage() {
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
             >
+              <option value="" disabled>Select a category</option>
               <option value="Rent">Rent</option>
               <option value="Utilities">Utilities</option>
               <option value="Advertising">Advertising / Meta Ads</option>
@@ -208,6 +214,7 @@ export default function ExpensesPage() {
               value={form.payment_method}
               onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
             >
+              <option value="" disabled>Select a payment method</option>
               <option value="Cash">Cash</option>
               <option value="GCash">GCash</option>
               <option value="Bank Transfer">Bank Transfer</option>
