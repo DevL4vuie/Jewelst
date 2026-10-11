@@ -26,6 +26,26 @@ const createRecordId = prefix => (
   `${prefix}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
 );
 
+function isRetryableStorageError(error) {
+  const status = Number(error?.statusCode || error?.status);
+  return status === 408 || status === 429 || status >= 500 ||
+    /failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(error?.message || '');
+}
+
+async function removeDesignImages(paths) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let error;
+    try {
+      ({ error } = await supabase.storage.from('design-images').remove(paths));
+    } catch (caughtError) {
+      error = caughtError;
+    }
+    if (!error) return;
+    if (!isRetryableStorageError(error) || attempt === 3) throw error;
+    await new Promise(resolve => window.setTimeout(resolve, 400 * (2 ** (attempt - 1))));
+  }
+}
+
 async function loadSharedData() {
   if (!supabase) throw new Error('Supabase is not configured.');
 
@@ -307,6 +327,7 @@ export function DataProvider({ children }) {
     const generation = loadGenerationRef.current;
     const syncUserId = user.id;
     const snapshot = data;
+    const previousData = persistedDataRef.current;
     const { changes, settings } = getStateChanges(persistedDataRef.current, snapshot);
     if (Object.keys(changes).length === 0 && !settings) return;
 
@@ -324,10 +345,28 @@ export function DataProvider({ children }) {
         ...remoteData,
         settings: { ...initialData.settings, ...remoteData.settings }
       };
+      const retainedPhotoPaths = new Set(
+        normalizedRemote.designs.map(design => design.photo_path).filter(Boolean)
+      );
+      const removedPhotoPaths = [...new Set(
+        (previousData?.designs || [])
+          .map(design => design.photo_path)
+          .filter(path => path && !retainedPhotoPaths.has(path))
+      )];
       persistedDataRef.current = normalizedRemote;
       const changesDuringWrite = getStateChanges(snapshot, dataRef.current);
       setData(applyStateChanges(normalizedRemote, changesDuringWrite.changes, changesDuringWrite.settings));
       setSyncError('');
+      if (removedPhotoPaths.length) {
+        try {
+          await removeDesignImages(removedPhotoPaths);
+        } catch (error) {
+          console.error('Design details were saved, but replaced or removed images could not be deleted from Supabase Storage:', error);
+          setSyncError(
+            `Design details were saved, but an old image could not be removed from Supabase Storage. ${error.message || 'Check your connection and retry.'}`
+          );
+        }
+      }
     }).catch(error => {
       if (loadGenerationRef.current !== generation || authUserIdRef.current !== syncUserId) return;
       console.error('Could not save business data to Supabase:', error);
