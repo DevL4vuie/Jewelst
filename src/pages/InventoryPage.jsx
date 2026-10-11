@@ -3,17 +3,19 @@ import { useData } from '../contexts/DataContext';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import StatusChip from '../components/ui/StatusChip';
 import DataTable from '../components/shared/DataTable';
 import { formatCurrency } from '../lib/calculationUtils';
-import { Boxes, Sliders, AlertTriangle, ArrowUpDown, Plus } from 'lucide-react';
+import { Archive, Boxes, Sliders, AlertTriangle, ArrowUpDown, Plus } from 'lucide-react';
 
 export default function InventoryPage() {
-  const { data, getVariantStock, getVariantCost, addStockAdjustment } = useData();
+  const { data, getVariantStock, getVariantCost, addStockAdjustment, archiveVariant } = useData();
 
   const [adjustModalOpen, setAdjustModalOpen] = useState(false);
   const [selectedVariantForAdj, setSelectedVariantForAdj] = useState(null);
+  const [variantToArchive, setVariantToArchive] = useState(null);
   const [adjustForm, setAdjustForm] = useState({
     quantity_change: '',
     reason: '',
@@ -126,10 +128,21 @@ export default function InventoryPage() {
       header: 'Action',
       align: 'center',
       render: (r) => (
-        <Button size="sm" variant="default" onClick={() => handleOpenAdjust(r)}>
-          <Sliders size={14} />
-          <span>Adjust</span>
-        </Button>
+        <div className="flex justify-center gap-1">
+          <Button size="sm" variant="default" onClick={() => handleOpenAdjust(r)}>
+            <Sliders size={14} />
+            <span>Adjust</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => setVariantToArchive(r)}
+            aria-label={`Archive ${r.designName}, size ${r.size}, ${r.color}`}
+          >
+            <Archive size={14} />
+            <span>Archive</span>
+          </Button>
+        </div>
       )
     }
   ];
@@ -238,6 +251,19 @@ export default function InventoryPage() {
           </form>
         )}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={Boolean(variantToArchive)}
+        onClose={() => setVariantToArchive(null)}
+        onConfirm={() => {
+          archiveVariant(variantToArchive.id);
+          setVariantToArchive(null);
+        }}
+        title="Archive Inventory Variant?"
+        message={`Are you sure you want to archive ${variantToArchive?.designName}, size ${variantToArchive?.size} (${variantToArchive?.color})? It will be removed from active inventory and can be permanently deleted or restored from Archived Records.`}
+        confirmText="Archive Variant"
+        variant="danger"
+      />
     </div>
   );
 }

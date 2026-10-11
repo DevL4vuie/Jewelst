@@ -542,10 +542,21 @@ export function DataProvider({ children }) {
   };
 
   const deleteDesign = async (id) => {
-    // Check if any variants depend on it
-    const hasVariants = data.variants.some(v => v.design_id === id);
-    if (hasVariants) {
-      throw new Error('Cannot delete: This design has active or archived variants.');
+    const dependentVariants = data.variants.filter(variant => variant.design_id === id);
+    const variantsWithHistory = dependentVariants.filter(variant => (
+      data.sales.some(sale => sale.variant_id === variant.id) ||
+      data.purchases.some(purchase => purchase.items?.some(item => item.variant_id === variant.id)) ||
+      data.orders.some(order => order.items?.some(item => item.variant_id === variant.id)) ||
+      data.sponsored_items.some(item => item.variant_id === variant.id) ||
+      data.stock_adjustments.some(adjustment => adjustment.variant_id === variant.id)
+    ));
+    if (variantsWithHistory.length > 0) {
+      const labels = variantsWithHistory
+        .map(variant => `size ${variant.size} (${variant.color})`)
+        .join(', ');
+      throw new Error(
+        `Cannot delete this design because its variant${variantsWithHistory.length > 1 ? 's are' : ' is'} linked to historical records: ${labels}. Keep the design archived to preserve sales, purchase, order, giveaway, and stock adjustment history.`
+      );
     }
     const design = data.designs.find(item => item.id === id);
     if (design?.photo_path) {
@@ -568,9 +579,13 @@ export function DataProvider({ children }) {
     }
     setData(prev => ({
       ...prev,
-      designs: prev.designs.filter(d => d.id !== id)
+      designs: prev.designs.filter(d => d.id !== id),
+      variants: prev.variants.filter(variant => variant.design_id !== id)
     }));
-    logActivity('Design Permanently Deleted', `Deleted design ID: ${id}`);
+    logActivity(
+      'Design Permanently Deleted',
+      `Deleted design ID: ${id} and ${dependentVariants.length} unused variant(s)`
+    );
     return true;
   };
 

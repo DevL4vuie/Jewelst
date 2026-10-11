@@ -33,6 +33,7 @@ export default function ArchivedPage() {
   const [itemToDelete, setItemToDelete] = useState(null);
   const [deleteActionFn, setDeleteActionFn] = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  const [deleteMessage, setDeleteMessage] = useState('This record will be permanently deleted. This action cannot be undone. Continue?');
 
   const archivedCategories = data.categories.filter(c => c.archived_at);
   const archivedDesigns = data.designs.filter(d => d.archived_at);
@@ -42,10 +43,11 @@ export default function ArchivedPage() {
   const archivedExpenses = data.expenses.filter(e => e.archived_at);
   const archivedCapital = data.capital_entries.filter(c => c.archived_at);
 
-  const requestPermanentDelete = (item, deleteFn) => {
+  const requestPermanentDelete = (item, deleteFn, message) => {
     setDeleteError('');
     setItemToDelete(item);
     setDeleteActionFn(() => deleteFn);
+    setDeleteMessage(message || 'This record will be permanently deleted. This action cannot be undone. Continue?');
     setConfirmOpen(true);
   };
 
@@ -156,7 +158,15 @@ export default function ArchivedPage() {
                             <Button size="sm" variant="success" onClick={() => restoreDesign(d.id)}>
                               <RotateCcw size={14} /> Restore
                             </Button>
-                            <Button size="sm" variant="danger" onClick={() => requestPermanentDelete(d, () => deleteDesign(d.id))}>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => requestPermanentDelete(
+                                d,
+                                () => deleteDesign(d.id),
+                                'This design and its variants will be permanently deleted if none of the variants are linked to historical sales, purchases, orders, giveaways, or stock adjustments. This action cannot be undone. Continue?'
+                              )}
+                            >
                               <Trash2 size={14} /> Permanent Delete
                             </Button>
                           </div>
@@ -416,7 +426,7 @@ export default function ArchivedPage() {
         onConfirm={handleConfirmDelete}
         errorMessage={deleteError}
         title="Permanent Record Deletion"
-        message="This record will be permanently deleted. This action cannot be undone. Continue?"
+        message={deleteMessage}
         confirmText="Permanently Delete"
         variant="danger"
       />
