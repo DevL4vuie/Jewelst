@@ -77,7 +77,7 @@ export default function DataTable({
             {paginatedData.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
-                  <div className="text-muted font-bold">No records found matching your query.</div>
+                  <div className="text-muted font-bold">No matching records found.</div>
                 </td>
               </tr>
             ) : (

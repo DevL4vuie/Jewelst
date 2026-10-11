@@ -40,7 +40,7 @@ function ProtectedRoute({ children, adminOnly = false }) {
   if (dataLoading) {
     return (
       <div className="pos-bg flex items-center justify-center" style={{ minHeight: '100vh', padding: '1rem' }}>
-        <p role="status" aria-live="polite" className="font-bold">Loading shared business data from Supabase...</p>
+        <p role="status" aria-live="polite" className="font-bold">Loading your business data...</p>
       </div>
     );
   }
