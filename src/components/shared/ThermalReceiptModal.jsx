@@ -31,6 +31,15 @@ export default function ThermalReceiptModal({
     (total, item) => total + (Number(item.quantity) || 0) * (Number(item.selling_price) || 0),
     0
   );
+  const transactionDateTime = saleDetails.transaction_time
+    ? new Date(saleDetails.transaction_time)
+    : null;
+  const receiptDate = transactionDateTime && !Number.isNaN(transactionDateTime.getTime())
+    ? transactionDateTime.toLocaleDateString('en-PH')
+    : saleDetails.sale_date || new Date().toLocaleDateString('en-PH');
+  const receiptTime = transactionDateTime && !Number.isNaN(transactionDateTime.getTime())
+    ? transactionDateTime.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : 'Not recorded';
 
   const handlePrint = () => {
     window.print();
@@ -74,7 +83,8 @@ export default function ThermalReceiptModal({
         </div>
 
         <div style={{ borderBottom: '1px dashed #1d2a57', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
-          <div>Date: {saleDetails.sale_date || new Date().toLocaleDateString()}</div>
+          <div>Date: {receiptDate}</div>
+          <div>Time: {receiptTime}</div>
           <div>Ref: {saleDetails.transaction_id || saleDetails.order_number || saleDetails.id || 'TXN-' + Date.now()}</div>
           {isGiveaway ? (
             <>

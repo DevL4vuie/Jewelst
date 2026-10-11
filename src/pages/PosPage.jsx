@@ -154,6 +154,7 @@ export default function PosPage() {
 
     let completedSales = [];
     const transactionId = createTransactionId();
+    const transactionTime = new Date().toISOString();
 
     // Atomically process each cart item as a sale
     for (const item of cart) {
@@ -162,6 +163,7 @@ export default function PosPage() {
       const sale = recordSale({
         sale_date: new Date().toISOString().slice(0, 10),
         transaction_id: transactionId,
+        transaction_time: transactionTime,
         customer_id: selectedCustomer || null,
         variant_id: item.variantId,
         quantity: item.quantity,
@@ -183,6 +185,7 @@ export default function PosPage() {
     setLastSaleDetails({
       id: transactionId,
       transaction_id: transactionId,
+      transaction_time: transactionTime,
       sale_date: new Date().toLocaleDateString('en-PH'),
       productName: cart.length === 1 ? summaryItem.designName : `${summaryItem.designName} + ${cart.length - 1} more items`,
       variantInfo: cart.length === 1 ? `Size ${summaryItem.size}, ${summaryItem.color}` : `${totalItemCount} pairs total`,

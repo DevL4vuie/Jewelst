@@ -17,7 +17,8 @@ import {
   Archive,
   Layers,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  LoaderCircle
 } from 'lucide-react';
 
 export default function ProductsPage() {
@@ -52,6 +53,8 @@ export default function ProductsPage() {
   const [designPhotoPreview, setDesignPhotoPreview] = useState('');
   const [designSaveError, setDesignSaveError] = useState('');
   const [savingDesign, setSavingDesign] = useState(false);
+  const [designSaveStage, setDesignSaveStage] = useState('');
+  const [designSaveNotice, setDesignSaveNotice] = useState('');
   const designPhotoInputRef = useRef(null);
 
   // Variant modal state
@@ -92,6 +95,7 @@ export default function ProductsPage() {
   });
 
   const handleOpenAddDesign = () => {
+    setDesignSaveNotice('');
     setEditingDesign(null);
     setDesignForm({
       name: '',
@@ -103,10 +107,12 @@ export default function ProductsPage() {
     });
     setDesignPhoto(null);
     setDesignSaveError('');
+    setDesignSaveStage('');
     setDesignModalOpen(true);
   };
 
   const handleOpenEditDesign = (des) => {
+    setDesignSaveNotice('');
     setEditingDesign(des);
     setDesignForm({
       name: des.name,
@@ -118,6 +124,7 @@ export default function ProductsPage() {
     });
     setDesignPhoto(null);
     setDesignSaveError('');
+    setDesignSaveStage('');
     setDesignModalOpen(true);
   };
 
@@ -129,6 +136,8 @@ export default function ProductsPage() {
       return;
     }
     setSavingDesign(true);
+    setDesignSaveStage(designPhoto ? 'Uploading image to shared storage…' : 'Saving design…');
+    setDesignSaveNotice('');
     try {
       let payload = { ...designForm };
       if (designPhoto) {
@@ -150,6 +159,7 @@ export default function ProductsPage() {
           .from('design-images')
           .upload(photoPath, designPhoto, { contentType: designPhoto.type });
         if (error) throw error;
+        setDesignSaveStage('Image uploaded. Saving design details…');
         payload = { ...payload, photo_path: photoPath, photo_ref: '', photo_url: '' };
       }
       if (editingDesign) {
@@ -157,13 +167,20 @@ export default function ProductsPage() {
       } else {
         addDesign(payload);
       }
+      setDesignSaveNotice(designPhoto
+        ? 'Image uploaded successfully. Design saved and syncing to the shared database.'
+        : 'Design saved and syncing to the shared database.');
       setDesignModalOpen(false);
       setDesignPhoto(null);
     } catch (error) {
       console.error('Could not save design:', error);
-      setDesignSaveError(error.message || 'The design could not be saved. Please try again.');
+      const detail = error.message === 'Failed to fetch'
+        ? 'Could not reach Supabase Storage. Check the phone’s internet connection and confirm the deployed VITE_SUPABASE_URL points to the correct Supabase project.'
+        : error.message || 'Please try again.';
+      setDesignSaveError(`The design could not be saved. ${detail}`);
     } finally {
       setSavingDesign(false);
+      setDesignSaveStage('');
     }
   };
 
@@ -204,6 +221,12 @@ export default function ProductsPage() {
 
   return (
     <div>
+      {designSaveNotice && (
+        <div className="design-save-notice" role="status" aria-live="polite">
+          {designSaveNotice}
+          <button type="button" onClick={() => setDesignSaveNotice('')} aria-label="Dismiss message">×</button>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="pos-title text-2xl" style={{ margin: 0 }}>Sandal Designs & Variants</h1>
@@ -422,7 +445,9 @@ export default function ProductsPage() {
       {/* Add / Edit Design Modal */}
       <Modal
         isOpen={designModalOpen}
-        onClose={() => setDesignModalOpen(false)}
+        onClose={() => {
+          if (!savingDesign) setDesignModalOpen(false);
+        }}
         title={editingDesign ? 'Edit Sandal Design' : 'Add New Sandal Design'}
         tape="pink"
       >
@@ -455,6 +480,7 @@ export default function ProductsPage() {
               className="design-image-input"
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
+              disabled={savingDesign}
               onChange={(e) => {
                 const file = e.target.files?.[0] || null;
                 e.target.value = '';
@@ -476,6 +502,7 @@ export default function ProductsPage() {
             <div className="design-image-actions">
               <Button
                 type="button"
+                disabled={savingDesign}
                 onClick={() => designPhotoInputRef.current?.click()}
               >
                 {designPhotoPreview || designForm.photo_path || designForm.photo_ref || designForm.photo_url
@@ -483,9 +510,14 @@ export default function ProductsPage() {
                   : 'Choose Image'}
               </Button>
               <span className="text-xs text-muted">
-                Upload from this device (up to 10 MB). The image is shared by every size and color variant.
+                Choose an image up to 10 MB. It uploads when you create or update the design and is shared by every variant.
               </span>
             </div>
+            {designPhoto && !savingDesign && (
+              <div className="design-upload-status" role="status" aria-live="polite">
+                Image selected: {designPhoto.name}. It will upload when you save the design.
+              </div>
+            )}
             {(designPhotoPreview || designForm.photo_path || designForm.photo_ref || designForm.photo_url) && (
               <div className="design-image-preview">
                 {designPhotoPreview ? (
@@ -497,6 +529,7 @@ export default function ProductsPage() {
                   type="button"
                   size="sm"
                   variant="danger"
+                  disabled={savingDesign}
                   onClick={() => {
                     if (designPhotoPreview) {
                       setDesignPhoto(null);
@@ -511,6 +544,13 @@ export default function ProductsPage() {
             )}
           </div>
 
+          {savingDesign && (
+            <div className="design-upload-status" role="status" aria-live="polite">
+              <LoaderCircle size={18} className="design-upload-spinner" />
+              <span>{designSaveStage}</span>
+            </div>
+          )}
+
           {designSaveError && <div className="order-form-error" role="alert">{designSaveError}</div>}
 
           <Textarea
@@ -521,9 +561,11 @@ export default function ProductsPage() {
           />
 
           <div className="flex justify-end gap-2 mt-4">
-            <Button type="button" onClick={() => setDesignModalOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={() => setDesignModalOpen(false)} disabled={savingDesign}>Cancel</Button>
             <Button type="submit" variant="primary" disabled={savingDesign}>
-              {savingDesign ? 'Saving...' : editingDesign ? 'Update Design' : 'Create Design'}
+              {savingDesign
+                ? designPhoto ? 'Uploading image…' : 'Saving…'
+                : editingDesign ? 'Update Design' : 'Create Design'}
             </Button>
           </div>
         </form>

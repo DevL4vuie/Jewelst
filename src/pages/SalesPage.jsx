@@ -113,6 +113,7 @@ export default function SalesPage() {
     setSelectedSaleForReceipt({
       id: r.id,
       sale_date: r.sale_date,
+      transaction_time: r.transaction_time,
       order_number: r.saleReference,
       transaction_id: r.saleReference,
       items: r.receiptItems,

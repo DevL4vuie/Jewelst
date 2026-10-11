@@ -133,6 +133,7 @@ export default function SponsorsPage() {
     setGiveawayReceipt({
       id: giveaway.id,
       sale_date: giveaway.given_date,
+      transaction_time: giveaway.transaction_time,
       transaction_id: giveaway.id,
       sponsorName: giveaway.sponsorName,
       notes: giveaway.notes,

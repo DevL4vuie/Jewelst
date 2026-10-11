@@ -312,6 +312,50 @@ body,
   border-radius: 10px;
 }
 
+.design-upload-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--ink);
+  border-radius: 10px;
+  background: var(--light-blue);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.design-upload-spinner {
+  flex-shrink: 0;
+  animation: design-upload-spin 1s linear infinite;
+}
+
+.design-save-notice {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: var(--mint);
+  font-weight: 700;
+}
+
+.design-save-notice button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.25rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@keyframes design-upload-spin {
+  to { transform: rotate(360deg); }
+}
+
 .reports-chart-header {
   display: flex;
   align-items: flex-start;

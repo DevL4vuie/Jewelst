@@ -331,7 +331,10 @@ export function DataProvider({ children }) {
     }).catch(error => {
       if (loadGenerationRef.current !== generation || authUserIdRef.current !== syncUserId) return;
       console.error('Could not save business data to Supabase:', error);
-      setSyncError(`Changes are not saved to Supabase. ${error.message || 'Check your connection and retry.'}`);
+      const detail = error.message === 'Failed to fetch'
+        ? 'The app could not reach Supabase. Check the device’s internet connection and confirm the deployed VITE_SUPABASE_URL is correct.'
+        : error.message || 'Check your connection and retry.';
+      setSyncError(`Changes are not saved to Supabase. ${detail}`);
     }).finally(() => {
       writeInProgressRef.current = false;
       if (loadGenerationRef.current !== generation && authUserIdRef.current) {
@@ -691,6 +694,7 @@ export function DataProvider({ children }) {
     const newSale = {
       ...saleData,
       id: createRecordId('sale'),
+      transaction_time: saleData.transaction_time || new Date().toISOString(),
       sale_type: saleType,
       selling_price: effectivePrice,
       unit_cost: currentCost,
@@ -764,6 +768,7 @@ export function DataProvider({ children }) {
     }
 
     const saleDate = new Date().toISOString().slice(0, 10);
+    const transactionTime = new Date().toISOString();
     const saleType = order.sale_type || 'Retail';
     const transactionId = createTransactionId();
     const sales = order.items.map((item, index) => ({
@@ -772,6 +777,7 @@ export function DataProvider({ children }) {
       order_number: order.order_number,
       transaction_id: transactionId,
       sale_date: saleDate,
+      transaction_time: transactionTime,
       customer_id: order.customer_id,
       variant_id: item.variant_id,
       quantity: Number(item.quantity),
@@ -895,6 +901,7 @@ export function DataProvider({ children }) {
 
   const recordSponsoredItems = (items) => {
     const giveawayId = createTransactionId();
+    const transactionTime = new Date().toISOString();
     const quantityByVariant = items.reduce((totals, item) => {
       totals[item.variant_id] = (totals[item.variant_id] || 0) + Number(item.quantity || 0);
       return totals;
@@ -912,6 +919,7 @@ export function DataProvider({ children }) {
     const newItems = items.map(item => ({
       ...item,
       giveaway_id: giveawayId,
+      transaction_time: transactionTime,
       id: createRecordId('spitem'),
       unit_cost: getVariantCost(item.variant_id)
     }));
