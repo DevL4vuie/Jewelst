@@ -21,6 +21,18 @@ import {
   LoaderCircle
 } from 'lucide-react';
 
+const DESIGN_IMAGE_UPLOAD_ATTEMPTS = 3;
+
+function isRetryableImageUploadError(error) {
+  const status = Number(error?.statusCode || error?.status);
+  return status === 408 || status === 429 || status >= 500 ||
+    /failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(error?.message || '');
+}
+
+function wait(milliseconds) {
+  return new Promise(resolve => window.setTimeout(resolve, milliseconds));
+}
+
 export default function ProductsPage() {
   const { user } = useAuth();
   const {
@@ -155,10 +167,29 @@ export default function ProductsPage() {
 
         const uniqueId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const photoPath = `${user.id}/${uniqueId}.${extension}`;
-        const { error } = await supabase.storage
-          .from('design-images')
-          .upload(photoPath, designPhoto, { contentType: designPhoto.type });
-        if (error) throw error;
+        let uploaded = false;
+        for (let attempt = 1; attempt <= DESIGN_IMAGE_UPLOAD_ATTEMPTS; attempt += 1) {
+          try {
+            const { error } = await supabase.storage
+              .from('design-images')
+              .upload(photoPath, designPhoto, {
+                contentType: designPhoto.type,
+                upsert: true
+              });
+            if (error) throw error;
+            uploaded = true;
+            break;
+          } catch (error) {
+            if (!isRetryableImageUploadError(error) || attempt === DESIGN_IMAGE_UPLOAD_ATTEMPTS) {
+              throw error;
+            }
+            setDesignSaveStage(
+              `Connection interrupted. Retrying image upload (${attempt + 1}/${DESIGN_IMAGE_UPLOAD_ATTEMPTS})…`
+            );
+            await wait(400 * (2 ** (attempt - 1)) + Math.random() * 300);
+          }
+        }
+        if (!uploaded) throw new Error('The image upload did not complete. Please try again.');
         setDesignSaveStage('Image uploaded. Saving design details…');
         payload = { ...payload, photo_path: photoPath, photo_ref: '', photo_url: '' };
       }
@@ -174,7 +205,7 @@ export default function ProductsPage() {
       setDesignPhoto(null);
     } catch (error) {
       console.error('Could not save design:', error);
-      const detail = error.message === 'Failed to fetch'
+      const detail = isRetryableImageUploadError(error)
         ? 'Could not reach Supabase Storage. Check the phone’s internet connection and confirm the deployed VITE_SUPABASE_URL points to the correct Supabase project.'
         : error.message || 'Please try again.';
       setDesignSaveError(`The design could not be saved. ${detail}`);
